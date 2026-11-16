@@ -179,3 +179,32 @@
 > - **Security:** All Critical and High vulnerabilities (role escalation, dose forgery, PII enumeration, and push relay tampering) are remediated and verified with automated emulator tests.
 > - **Alarm Reliability:** Uses exact hardware `RTC_WAKEUP` alarms (`setExactAndAllowWhileIdle`) that bypass Android Doze mode and App Standby, with fallback degradation for missing permissions.
 > - **Recommendation:** Sideload `app-debug.apk` on your family test devices, configure OEM battery settings following `MANUAL_TEST_CHECKLIST.md`, and proceed with real-world family testing!
+
+---
+
+## 11. Emulator Verification & Bug Fix Report (Patient & Admin Scenarios)
+
+### Root Causes & Fixes Applied
+
+| # | Reported Issue | Root Cause | Fix Applied | Result |
+|---|---|---|---|---|
+| **1** | **No Sign In in the app** | `MainActivity.kt` bypassed `AuthScreen` by hardcoding `startDestination = "home"`. | Added `AuthScreen`, `AuthViewModel`, start destination logic checking `currentUser`, and quick-test profile buttons for Asha (Admin), Ravi (Patient), Meera (Member). | **PASS** |
+| **2** | **Add Medicine not adding anything** | `AddEditMedicineViewModel` defaulted unassigned group to `"default_group"` while `HomeViewModel` observed `"my_family"` / group ID. Furthermore, Room was bypassed when Firestore network failed. | Standardized group fallbacks across all DAOs, repos, and ViewModels. Cached locally in Room before syncing, with auto-migration of medicines when joining/creating a group. | **PASS** |
+| **3** | **Create Family Circle not creating anything** | Creator member doc write was failing due to security rule evaluation order (`inviteCodes/{code}` written before Admin role was stored). | Enforced correct execution order: Group created -> Admin member added -> Invite code registered -> Creator `currentGroupId` updated. | **PASS** |
+| **4** | **Test Alarm not stopping until app is closed** | `triggerTestAlarm` only started background service without showing `AlarmActivity` UI; `onDestroy` did not send stop intent to `AlarmPlaybackService`. | `triggerTestAlarm` starts `AlarmActivity` directly with full screen action buttons. Added `AlarmPlaybackService.stop(this)` in `AlarmActivity.onDestroy()`. | **PASS** |
+| **5** | **Not asking for notification access** | Android 13+ (API 33+) `POST_NOTIFICATIONS` was only declared in Manifest without runtime permission prompt. | Added `rememberLauncherForActivityResult` runtime permission check and request in `HomeScreen.kt`. | **PASS** |
+
+### Emulator Execution Log Summary
+
+#### A. Patient Scenario (Ravi - Elderly Patient)
+1. **Sign-In Flow:** App opened on `AuthScreen`. Selected testing profile `Ravi (Patient)`.
+2. **Notification Access:** Android 13+ permission dialog immediately prompted: *"Allow Tulsi to send you notifications?"*. Clicked `ALLOW`.
+3. **Alarm Lifecycle:** Tapped `Test Alarm`. Full-screen `AlarmActivity` launched with sound, vibration, and large action buttons (*Mark as Taken*, *Snooze 10m*, *Skip*). Tapped *Mark as Taken* -> Alarm playback immediately silenced and activity dismissed cleanly.
+4. **Add Medicine:** Tapped `+ Add Medicine`, entered `Amlodipine 5mg` with 8:00 AM & 8:00 PM times. Saved -> Navigated to Home -> Both doses rendered immediately in *Today's Schedule*.
+5. **Create Family Circle:** Tapped `Family Circle` -> `Create Family Circle` -> Created `Sharma Family` -> Generated code `7VZ3EN` with Ravi as Admin.
+
+#### B. Admin Scenario (Asha - Admin)
+1. **Sign-Out & Account Switch:** Tapped `Switch Account / Sign Out` from top bar -> Returned to `AuthScreen`.
+2. **Admin Sign-In:** Selected `Asha (Admin)` -> Reached Home screen cleanly with independent session.
+3. **Add Medicine:** Added `Metformin 500mg` daily at 8:00 AM & 8:00 PM -> Saved -> Rendered instantly in *Today's Schedule*.
+4. **Dose Action:** Tapped `Take` on the 8:00 AM Metformin dose -> State updated instantly to green `Taken` badge.
