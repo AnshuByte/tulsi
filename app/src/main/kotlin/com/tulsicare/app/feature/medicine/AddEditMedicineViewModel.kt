@@ -1,4 +1,4 @@
-﻿package com.tulsicare.app.feature.medicine
+package com.tulsicare.app.feature.medicine
 
 import android.content.Context
 import androidx.lifecycle.SavedStateHandle
@@ -74,7 +74,7 @@ class AddEditMedicineViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             val user = authRepository.getCurrentUser()
-            val groupId = if (initialGroupId.isNotBlank()) initialGroupId else user?.currentGroupId.orEmpty()
+            val groupId = if (initialGroupId.isNotBlank()) initialGroupId else user?.currentGroupId.orEmpty().ifBlank { "my_family" }
             val userId = user?.id.orEmpty()
 
             val members = if (groupId.isNotBlank()) {
@@ -182,7 +182,7 @@ class AddEditMedicineViewModel @Inject constructor(
 
             val medicine = Medicine(
                 id = medicineId,
-                groupId = state.groupId.ifBlank { "default_group" },
+                groupId = state.groupId.ifBlank { "my_family" },
                 assignedMemberId = state.assignedMemberId,
                 name = state.name.trim(),
                 dosage = state.dosage.trim(),

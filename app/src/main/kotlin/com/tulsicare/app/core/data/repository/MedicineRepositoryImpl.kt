@@ -1,4 +1,4 @@
-﻿package com.tulsicare.app.core.data.repository
+package com.tulsicare.app.core.data.repository
 
 import com.tulsicare.app.core.database.dao.MedicineDao
 import com.tulsicare.app.core.database.entity.toEntity
@@ -39,29 +39,34 @@ class MedicineRepositoryImpl @Inject constructor(
         val now = System.currentTimeMillis()
         val toSave = medicine.copy(id = id, createdAt = now, updatedAt = now)
 
-        // Write to Firestore first
-        firestore.collection("groups")
-            .document(toSave.groupId)
-            .collection("medicines")
-            .document(id)
-            .set(toSave)
-            .await()
-
-        // Cache in Room
+        // Cache in Room immediately for instant local UI display
         medicineDao.insertMedicine(toSave.toEntity())
+
+        // Sync to Firestore in background
+        runCatching {
+            firestore.collection("groups")
+                .document(toSave.groupId)
+                .collection("medicines")
+                .document(id)
+                .set(toSave)
+                .await()
+        }
+
         id
     }
 
     override suspend fun updateMedicine(medicine: Medicine): Result<Unit> = runCatching {
         val updated = medicine.copy(updatedAt = System.currentTimeMillis())
-        firestore.collection("groups")
-            .document(updated.groupId)
-            .collection("medicines")
-            .document(updated.id)
-            .set(updated)
-            .await()
-
         medicineDao.updateMedicine(updated.toEntity())
+
+        runCatching {
+            firestore.collection("groups")
+                .document(updated.groupId)
+                .collection("medicines")
+                .document(updated.id)
+                .set(updated)
+                .await()
+        }
     }
 
     override suspend fun deleteMedicine(groupId: String, medicineId: String): Result<Unit> = runCatching {

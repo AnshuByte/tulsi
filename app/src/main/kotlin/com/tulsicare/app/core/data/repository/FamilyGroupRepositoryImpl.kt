@@ -59,12 +59,7 @@ class FamilyGroupRepositoryImpl @Inject constructor(
         // 1. Create group in Firestore
         firestore.collection("groups").document(groupId).set(group).await()
 
-        // 1b. Write invite code resolution doc for secure joining
-        firestore.collection("inviteCodes").document(inviteCode).set(
-            mapOf("code" to inviteCode, "groupId" to groupId)
-        ).await()
-
-        // 2. Add creator as ADMIN member
+        // 2. Add creator as ADMIN member FIRST so that isGroupAdmin(groupId) rules succeed
         val adminMember = GroupMember(
             userId = creatorUser.id,
             displayName = creatorUser.displayName.ifBlank { "Admin" },
@@ -80,14 +75,26 @@ class FamilyGroupRepositoryImpl @Inject constructor(
             .set(adminMember)
             .await()
 
-        // 3. Update creator's currentGroupId in users collection
+        // 3. Write invite code resolution doc for secure joining
+        runCatching {
+            firestore.collection("inviteCodes").document(inviteCode).set(
+                mapOf("code" to inviteCode, "groupId" to groupId)
+            ).await()
+        }
+
+        // 4. Update creator's currentGroupId in users collection
         firestore.collection("users").document(creatorUser.id)
             .set(mapOf("currentGroupId" to groupId), SetOptions.merge())
             .await()
 
-        // 4. Cache in Room
+        // 5. Cache in Room
         familyGroupDao.insertGroup(group.toEntity())
         familyGroupDao.insertMember(adminMember.toEntity(groupId))
+
+        // 6. Migrate pre-group local medicines, schedules, and dose events
+        medicineDao.reassignGroup(listOf("default_group", "my_family"), groupId)
+        scheduleDao.reassignGroup(listOf("default_group", "my_family"), groupId)
+        doseEventDao.reassignGroup(listOf("default_group", "my_family"), groupId)
 
         group
     }
@@ -144,6 +151,11 @@ class FamilyGroupRepositoryImpl @Inject constructor(
         // Cache in Room
         familyGroupDao.insertGroup(group.toEntity())
         familyGroupDao.insertMember(member.toEntity(group.id))
+
+        // Migrate pre-group local medicines, schedules, and dose events
+        medicineDao.reassignGroup(listOf("default_group", "my_family"), group.id)
+        scheduleDao.reassignGroup(listOf("default_group", "my_family"), group.id)
+        doseEventDao.reassignGroup(listOf("default_group", "my_family"), group.id)
 
         group
     }

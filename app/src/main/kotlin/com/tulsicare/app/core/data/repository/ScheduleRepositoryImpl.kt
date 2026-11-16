@@ -43,38 +43,47 @@ class ScheduleRepositoryImpl @Inject constructor(
         val id = if (schedule.id.isBlank()) UUID.randomUUID().toString() else schedule.id
         val toSave = schedule.copy(id = id)
 
-        // Write to Firestore
-        firestore.collection("groups")
-            .document(toSave.groupId)
-            .collection("schedules")
-            .document(id)
-            .set(toSave)
-            .await()
-
-        // Cache in Room
+        // Cache in Room immediately
         scheduleDao.insertSchedule(toSave.toEntity())
 
-        // Reschedule alarms
+        // Reschedule alarms immediately
         ExactAlarmScheduler.rescheduleAll(context)
 
+        // Sync to Firestore in background
+        runCatching {
+            firestore.collection("groups")
+                .document(toSave.groupId)
+                .collection("schedules")
+                .document(id)
+                .set(toSave)
+                .await()
+        }
+
         // Notify family members via Cloudflare Worker push relay
-        pushRelayClient.relayScheduleSync(toSave.groupId)
+        runCatching {
+            pushRelayClient.relayScheduleSync(toSave.groupId)
+        }
 
         id
     }
 
     override suspend fun updateSchedule(schedule: Schedule): Result<Unit> = runCatching {
-        firestore.collection("groups")
-            .document(schedule.groupId)
-            .collection("schedules")
-            .document(schedule.id)
-            .set(schedule)
-            .await()
-
         scheduleDao.updateSchedule(schedule.toEntity())
         ExactAlarmScheduler.cancelAlarm(context, schedule.id)
         ExactAlarmScheduler.rescheduleAll(context)
-        pushRelayClient.relayScheduleSync(schedule.groupId)
+
+        runCatching {
+            firestore.collection("groups")
+                .document(schedule.groupId)
+                .collection("schedules")
+                .document(schedule.id)
+                .set(schedule)
+                .await()
+        }
+
+        runCatching {
+            pushRelayClient.relayScheduleSync(schedule.groupId)
+        }
     }
 
     override suspend fun deleteSchedule(groupId: String, scheduleId: String): Result<Unit> = runCatching {

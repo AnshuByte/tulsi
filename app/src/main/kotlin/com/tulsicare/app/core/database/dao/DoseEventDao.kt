@@ -1,4 +1,4 @@
-﻿package com.tulsicare.app.core.database.dao
+package com.tulsicare.app.core.database.dao
 
 import androidx.room.Dao
 import androidx.room.Insert
@@ -49,7 +49,7 @@ interface DoseEventDao {
 
     @Query("""
         SELECT * FROM dose_events 
-        WHERE groupId = :groupId AND scheduledAt >= :startMillis AND scheduledAt <= :endMillis 
+        WHERE (groupId = :groupId OR groupId IN ('my_family', 'default_group')) AND scheduledAt >= :startMillis AND scheduledAt <= :endMillis 
         ORDER BY scheduledAt ASC
     """)
     fun observeEventsForDateRange(
@@ -60,7 +60,7 @@ interface DoseEventDao {
 
     @Query("""
         SELECT * FROM dose_events 
-        WHERE groupId = :groupId AND scheduledAt >= :startMillis AND scheduledAt <= :endMillis 
+        WHERE (groupId = :groupId OR groupId IN ('my_family', 'default_group')) AND scheduledAt >= :startMillis AND scheduledAt <= :endMillis 
         ORDER BY scheduledAt ASC
     """)
     suspend fun getEventsForDateRange(
@@ -68,6 +68,9 @@ interface DoseEventDao {
         startMillis: Long,
         endMillis: Long
     ): List<DoseEventEntity>
+
+    @Query("UPDATE dose_events SET groupId = :targetGroupId WHERE groupId IN (:sourceGroupIds)")
+    suspend fun reassignGroup(sourceGroupIds: List<String>, targetGroupId: String)
 
     @Query("""
         SELECT * FROM dose_events 

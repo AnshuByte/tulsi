@@ -1,4 +1,4 @@
-﻿package com.tulsicare.app.feature.alarm
+package com.tulsicare.app.feature.alarm
 
 import android.app.KeyguardManager
 import android.content.Context
@@ -130,6 +130,11 @@ class AlarmActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    override fun onDestroy() {
+        AlarmPlaybackService.stop(this)
+        super.onDestroy()
     }
 
     private fun turnScreenOnAndShowWhenLocked() {

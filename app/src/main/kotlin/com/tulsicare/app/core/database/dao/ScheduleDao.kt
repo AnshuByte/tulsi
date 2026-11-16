@@ -1,4 +1,4 @@
-﻿package com.tulsicare.app.core.database.dao
+package com.tulsicare.app.core.database.dao
 
 import androidx.room.Dao
 import androidx.room.Insert
@@ -35,8 +35,11 @@ interface ScheduleDao {
     @Query("SELECT * FROM schedules WHERE groupId = :groupId AND isActive = 1")
     fun observeActiveSchedules(groupId: String): Flow<List<ScheduleEntity>>
 
-    @Query("SELECT * FROM schedules WHERE groupId = :groupId AND isActive = 1")
+    @Query("SELECT * FROM schedules WHERE (groupId = :groupId OR groupId IN ('my_family', 'default_group')) AND isActive = 1")
     suspend fun getActiveSchedules(groupId: String): List<ScheduleEntity>
+
+    @Query("UPDATE schedules SET groupId = :targetGroupId WHERE groupId IN (:sourceGroupIds)")
+    suspend fun reassignGroup(sourceGroupIds: List<String>, targetGroupId: String)
 
     @Query("SELECT * FROM schedules WHERE isActive = 1")
     suspend fun getAllActiveSchedules(): List<ScheduleEntity>

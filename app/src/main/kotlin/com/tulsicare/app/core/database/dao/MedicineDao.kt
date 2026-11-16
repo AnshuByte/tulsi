@@ -1,4 +1,4 @@
-﻿package com.tulsicare.app.core.database.dao
+package com.tulsicare.app.core.database.dao
 
 import androidx.room.Dao
 import androidx.room.Insert
@@ -26,11 +26,14 @@ interface MedicineDao {
     @Query("SELECT * FROM medicines WHERE id = :id")
     suspend fun getMedicineById(id: String): MedicineEntity?
 
-    @Query("SELECT * FROM medicines WHERE groupId = :groupId AND isActive = 1 ORDER BY name ASC")
+    @Query("SELECT * FROM medicines WHERE (groupId = :groupId OR groupId IN ('my_family', 'default_group')) AND isActive = 1 ORDER BY name ASC")
     fun observeActiveMedicines(groupId: String): Flow<List<MedicineEntity>>
 
-    @Query("SELECT * FROM medicines WHERE groupId = :groupId AND isActive = 1")
+    @Query("SELECT * FROM medicines WHERE (groupId = :groupId OR groupId IN ('my_family', 'default_group')) AND isActive = 1")
     suspend fun getActiveMedicines(groupId: String): List<MedicineEntity>
+
+    @Query("UPDATE medicines SET groupId = :targetGroupId WHERE groupId IN (:sourceGroupIds)")
+    suspend fun reassignGroup(sourceGroupIds: List<String>, targetGroupId: String)
 
     @Query("SELECT * FROM medicines WHERE id IN (:ids) AND isActive = 1")
     suspend fun getMedicinesByIds(ids: List<String>): List<MedicineEntity>

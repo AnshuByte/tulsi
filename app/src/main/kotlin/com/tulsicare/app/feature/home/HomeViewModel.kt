@@ -1,4 +1,4 @@
-﻿package com.tulsicare.app.feature.home
+package com.tulsicare.app.feature.home
 
 import android.content.Context
 import android.content.Intent
@@ -65,8 +65,11 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    private var loadDataJob: kotlinx.coroutines.Job? = null
+
     fun loadData() {
-        viewModelScope.launch {
+        loadDataJob?.cancel()
+        loadDataJob = viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
 
             // Ensure user exists (sign in anonymously if not authenticated yet)
@@ -132,15 +135,30 @@ class HomeViewModel @Inject constructor(
     fun triggerTestAlarm(context: Context) {
         val firstMed = _uiState.value.medicines.firstOrNull()
         val medId = firstMed?.id ?: "test_med"
-        val medName = firstMed?.name ?: "Metformin"
-        val dosage = firstMed?.dosage ?: "500 mg"
+        val medName = firstMed?.name ?: "Metformin 500mg"
+        val dosage = firstMed?.dosage ?: "1 tablet"
 
-        val intent = Intent(context, AlarmReceiver::class.java).apply {
+        // 1. Launch AlarmActivity directly so the full screen with Taken/Snooze/Skip buttons is visible immediately
+        val activityIntent = Intent(context, com.tulsicare.app.feature.alarm.AlarmActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra(AlarmReceiver.EXTRA_MEDICINE_ID, medId)
             putExtra(AlarmReceiver.EXTRA_MEDICINE_NAME, medName)
             putExtra(AlarmReceiver.EXTRA_DOSAGE, dosage)
             putExtra(AlarmReceiver.EXTRA_SCHEDULE_ID, "test_schedule")
         }
-        context.sendBroadcast(intent)
+        context.startActivity(activityIntent)
+
+        // 2. Also start AlarmPlaybackService for sound and vibration
+        val serviceIntent = Intent(context, com.tulsicare.app.core.alarm.AlarmPlaybackService::class.java).apply {
+            putExtra(AlarmReceiver.EXTRA_MEDICINE_ID, medId)
+            putExtra(AlarmReceiver.EXTRA_MEDICINE_NAME, medName)
+            putExtra(AlarmReceiver.EXTRA_DOSAGE, dosage)
+            putExtra(AlarmReceiver.EXTRA_SCHEDULE_ID, "test_schedule")
+        }
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            androidx.core.content.ContextCompat.startForegroundService(context, serviceIntent)
+        } else {
+            context.startService(serviceIntent)
+        }
     }
 }
