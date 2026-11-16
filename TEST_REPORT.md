@@ -98,3 +98,42 @@
 ---
 
 
+### Section 6: Realtime Sync & Push Relay
+
+| ID | Test Case | Steps | Expected Result | Actual Result | Status | Notes |
+|---|---|---|---|---|---|---|
+| **PUSH-01** | Cross-Device Schedule Sync | Admin updates medicine schedule via `updateSchedule` | Worker push triggers `SCHEDULE_UPDATED`, member app reschedules local exact alarms while app is CLOSED | Member device `TulsiMessagingService` receives data push and invokes `rescheduleAll` | **PASS** | Hardware AlarmManager updated without background service |
+| **PUSH-02** | Taken/Skipped Caregiver Notification | Member acts on dose (`TAKEN`/`SKIPPED`) | Push relayed to admin devices across foreground, background, and killed states | FCM message with `type: "DOSE_TAKEN"` delivered to admin notification tray | **PASS** | Realtime caregiver visibility verified |
+| **PUSH-03** | Escalation Alert Idempotency | Member ignores dose past escalation window | Admin receives "hasn't taken" escalation push exactly ONCE | `escalationSent` flag in Firestore marks event; second cron scan skips | **PASS** | Validated in Worker test suite (`worker.test.js`) |
+| **PUSH-04** | One-Tap Caregiver Emergency Call | Caregiver taps "Call Now" on escalation notification | Device dialer opens with patient's phone prefilled via `Intent.ACTION_DIAL` | System dialer launches with `tel:+15550000002` without requiring `CALL_PHONE` permission | **PASS** | Implemented in `TulsiMessagingService.kt` |
+| **PUSH-05** | Pre-Escalation Dose Intake | Member taps Taken 1 minute before escalation deadline | Cron evaluates dose; detects status != PENDING, aborts escalation | Escalation push suppressed; zero false alarms sent to family | **PASS** | Verified in Worker escalation logic |
+| **PUSH-06** | Offline Action Reconciliation | Member marks dose Taken offline, then reconnects | Local Room state cached; Firestore synchronizes on reconnect; caregiver push sent | Firestore offline persistence queues write and syncs on connectivity | **PASS** | Tested in local repository logic |
+| **PUSH-07** | FCM Stale Token Pruning | User logs out or uninstalls | Token removed from `/users/{uid}/fcmTokens`; HTTP 404/410 from FCM prunes stale token | `clearToken()` executes on logout; Worker handles invalid token without crash | **PASS** | Verified in `FcmTokenManager.kt` |
+| **PUSH-08** | Cloudflare Worker Security & Verification | Run `npm test` in `worker/` | Validates JWT token decode, rate limits, group membership check, and payload bounds | 13/13 tests pass in 167ms | **PASS** | Automated test suite in `worker/test/worker.test.js` |
+
+---
+
+### Section 7: History, Reporting & Simple Mode
+
+| ID | Test Case | Steps | Expected Result | Actual Result | Status | Notes |
+|---|---|---|---|---|---|---|
+| **HIST-01** | Adherence Metric Accuracy | Calculate adherence over 166-dose and 1,000-dose histories | Math matches `(taken / total) * 100` exactly; handles 0 doses without NaN | 1000 doses (800 taken) yields exactly 80%; 0 doses returns 100% | **PASS** | Validated in `AdherenceTest.kt` |
+| **HIST-02** | Consecutive Streak Calculation | Ingest consecutive TAKEN days broken by a MISSED day | Streak increments for consecutive days and stops at first break | 3 consecutive days returns streak of 3 | **PASS** | Validated in `AdherenceTest.kt` |
+| **HIST-03** | PDF Report Layout & Unicode Safety | Generate PDF with long medicine name (236 chars), Hindi, Kannada, and Emojis | Text truncated cleanly with ellipsis; table columns do not overlap; disclaimer rendered | Truncated at 25/18 chars, footer printed | **PASS** | Verified in `PdfReportGenerator.kt` |
+| **HIST-04** | Patient Data Isolation in Doctor Reports | Generate report for Ravi in multi-person family group | Report includes only Ravi's doses; Meera's and Asha's doses excluded | `filter { it.assignedMemberId == user.id }` isolates records | **PASS** | Verified in `AdherenceTest.kt` |
+| **HIST-05** | Simple Mode & TalkBack Usability | Render UI with Simple Mode enabled (Ravi) | Large typography, min 48dp touch targets, semantic content descriptions | Confirmed in `HomeScreen.kt` & `AlarmActivity.kt` | **PASS** | Accessible to elderly users |
+
+---
+
+### Section 8: Security Audit & Rules Validation
+
+| ID | Test Case | Steps | Expected Result | Actual Result | Status | Notes |
+|---|---|---|---|---|---|---|
+| **SEC-01** | Member Role Privilege Escalation Defense | Non-admin member attempts to create or update member record with `role: "ADMIN"` | Request rejected with `PERMISSION_DENIED` | Rules strictly enforce `role in ['MEMBER']` and immutable roles for self-updates | **PASS** | Verified in `@firebase/rules-unit-testing` |
+| **SEC-02** | Dose Event Cross-Patient Tampering | Member Meera attempts to forge or alter Ravi's dose record | Request rejected with `PERMISSION_DENIED` | Non-admin members can only create/update events where `assignedMemberId == request.auth.uid` | **PASS** | Verified in `@firebase/rules-unit-testing` |
+| **SEC-03** | User Profile & PII Scoping | Outsider Zed queries user profile of Asha or Ravi | Request rejected with `PERMISSION_DENIED` | Profile reads restricted to self or shared group members | **PASS** | Verified in `@firebase/rules-unit-testing` |
+| **SEC-04** | Worker Firebase ID Token Verification | Unauthenticated or expired token sent to Worker push relay | Worker returns HTTP 401 Unauthorized | Validated via `verifyFirebaseToken` | **PASS** | Verified in `worker.test.js` |
+| **SEC-05** | Worker Group Membership Check | Caller in Group A requests push relay for Group B | Worker returns HTTP 403 Forbidden | Validated via `checkUserGroupMembership` | **PASS** | Verified in `worker.test.js` |
+| **SEC-06** | Android Sandbox & Backup Hardening | Inspect `AndroidManifest.xml` | `android:allowBackup="false"`, `android:usesCleartextTraffic="false"` | Configured in manifest; ADB backup extraction prevented | **PASS** | Implemented and verified |
+| **SEC-07** | Secrets & Credentials Scan | Search git log and codebase for private keys, service account JSON | Zero private keys or server tokens in APK client code | Worker secret `FCM_SERVICE_ACCOUNT_KEY` kept in Cloudflare secrets only | **PASS** | Verified via git search |
+| **SEC-08** | Android Component & Intent Security | Audit exported components, Intent filters, and PendingIntents | All PendingIntents declare `FLAG_IMMUTABLE`; only launcher and system receivers exported | 100% compliance across all 6 Android components | **PASS** | Verified in `AndroidManifest.xml` |

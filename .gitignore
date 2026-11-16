@@ -15,3 +15,6 @@ local.properties
 *.keystore
 *service-account*.json
 
+node_modules/
+package-lock.json
+*.log

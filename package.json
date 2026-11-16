@@ -1,0 +1,19 @@
+{
+  "name": "dosecircle",
+  "version": "1.0.0",
+  "description": "> *\"Take care, together.\"*",
+  "main": "index.js",
+  "scripts": {
+    "test:rules": "npx firebase-tools emulators:exec --only firestore \"node --test scripts/test_firestore_rules.js\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^6.0.0"
+  },
+  "dependencies": {
+    "@protobufjs/aspromise": "^1.1.2"
+  }
+}

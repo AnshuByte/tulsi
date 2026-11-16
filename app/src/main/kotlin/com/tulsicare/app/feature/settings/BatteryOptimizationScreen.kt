@@ -376,6 +376,48 @@ fun BatteryOptimizationScreen(
                 Text("Open App System Settings")
             }
 
+            // Privacy Policy & Medical Disclaimer Card
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = "Privacy & Disclaimer",
+                            tint = PrimaryTeal
+                        )
+                        Text(
+                            text = "Privacy & Medical Disclaimer",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
+
+                    Text(
+                        text = "Medical Disclaimer: Tulsi is an adherence self-tracking reminder application. It does not provide medical diagnosis, clinical treatment advice, or drug interaction checks. Always follow the explicit instructions of your prescribing physician and pharmacists.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Text(
+                        text = "Privacy & Data Minimization: Your medication schedules and dose logs are shared only with invited members of your private family group. When you delete your account or leave a group, your local cache and associated cloud tokens are purged immediately. No health data is sold or shared with third-party advertisers.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
             Spacer(modifier = Modifier.height(24.dp))
         }
     }

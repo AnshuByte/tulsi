@@ -59,6 +59,11 @@ class FamilyGroupRepositoryImpl @Inject constructor(
         // 1. Create group in Firestore
         firestore.collection("groups").document(groupId).set(group).await()
 
+        // 1b. Write invite code resolution doc for secure joining
+        firestore.collection("inviteCodes").document(inviteCode).set(
+            mapOf("code" to inviteCode, "groupId" to groupId)
+        ).await()
+
         // 2. Add creator as ADMIN member
         val adminMember = GroupMember(
             userId = creatorUser.id,
@@ -93,19 +98,23 @@ class FamilyGroupRepositoryImpl @Inject constructor(
         require(cleanCode.length == 6) { "Invite code must be exactly 6 characters" }
         require(cleanCode.all { it.isLetterOrDigit() }) { "Invite code contains invalid characters" }
 
-        val querySnapshot = firestore.collection("groups")
-            .whereEqualTo("inviteCode", cleanCode)
-            .limit(1)
-            .get()
-            .await()
+        // First try secure resolution via top-level inviteCodes collection
+        val inviteDoc = firestore.collection("inviteCodes").document(cleanCode).get().await()
+        val targetGroupId = if (inviteDoc.exists()) {
+            inviteDoc.getString("groupId") ?: throw IllegalArgumentException("Invalid invite code format")
+        } else {
+            // Fallback for legacy groups created before inviteCodes mapping
+            val querySnapshot = firestore.collection("groups")
+                .whereEqualTo("inviteCode", cleanCode)
+                .limit(1)
+                .get()
+                .await()
 
-        if (querySnapshot.isEmpty) {
-            throw IllegalArgumentException("Invalid invite code. Group not found.")
+            if (querySnapshot.isEmpty) {
+                throw IllegalArgumentException("Invalid invite code. Group not found.")
+            }
+            querySnapshot.documents.first().id
         }
-
-        val doc = querySnapshot.documents.first()
-        val group = doc.toObject(FamilyGroup::class.java)?.copy(id = doc.id)
-            ?: throw IllegalStateException("Failed to parse family group")
 
         // Add user as MEMBER
         val member = GroupMember(
@@ -117,11 +126,15 @@ class FamilyGroupRepositoryImpl @Inject constructor(
             joinedAt = System.currentTimeMillis()
         )
         firestore.collection("groups")
-            .document(group.id)
+            .document(targetGroupId)
             .collection("members")
             .document(user.id)
             .set(member)
             .await()
+
+        val groupDoc = firestore.collection("groups").document(targetGroupId).get().await()
+        val group = groupDoc.toObject(FamilyGroup::class.java)?.copy(id = targetGroupId)
+            ?: throw IllegalStateException("Failed to parse family group")
 
         // Update user's currentGroupId
         firestore.collection("users").document(user.id)

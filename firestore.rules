@@ -17,12 +17,24 @@ service cloud.firestore {
     }
 
     function isGroupAdmin(groupId) {
-      return isAuthenticated() && get(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid)).data.role in ['ADMIN', 'admin'];
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid)).data.role in ['ADMIN', 'admin'];
+    }
+
+    // Top-level invite code resolution (prevents enumeration of groups)
+    match /inviteCodes/{code} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAuthenticated() && isGroupAdmin(request.resource.data.groupId);
     }
 
     // User profiles & FCM tokens
     match /users/{userId} {
-      allow read: if isAuthenticated();
+      // User can read self, or fellow family group members if currentGroupId is set
+      allow read: if isAuthenticated() && (
+        request.auth.uid == userId ||
+        (resource.data.currentGroupId != null && isGroupMember(resource.data.currentGroupId))
+      );
       allow write: if isUser(userId);
 
       match /fcmTokens/{tokenId} {
@@ -38,9 +50,25 @@ service cloud.firestore {
 
       match /members/{memberId} {
         allow read: if isGroupMember(groupId);
-        // Admin can manage members; a user can join (create their own member record with an invite)
-        allow create: if isAuthenticated() && (request.auth.uid == memberId || isGroupAdmin(groupId));
-        allow update, delete: if isGroupAdmin(groupId) || (request.auth.uid == memberId);
+        
+        // Privilege escalation protection:
+        // Admin can add members. Prospective member joining can ONLY set role to MEMBER,
+        // unless creating the initial group doc.
+        allow create: if isAuthenticated() && (
+          isGroupAdmin(groupId) ||
+          (request.auth.uid == memberId && (
+            request.resource.data.role in ['MEMBER', 'member'] ||
+            !exists(/databases/$(database)/documents/groups/$(groupId))
+          ))
+        );
+
+        // Member cannot promote themselves to ADMIN
+        allow update: if isGroupAdmin(groupId) || (
+          request.auth.uid == memberId && 
+          request.resource.data.role == resource.data.role
+        );
+
+        allow delete: if isGroupAdmin(groupId) || (request.auth.uid == memberId);
       }
 
       match /medicines/{medicineId} {
@@ -55,8 +83,23 @@ service cloud.firestore {
 
       match /doseEvents/{eventId} {
         allow read: if isGroupMember(groupId);
-        // Members can create/update dose events (e.g., mark Taken, Skipped, Snoozed)
-        allow create, update: if isGroupMember(groupId);
+        
+        // Members can only log their own doses; admins can log for anyone in the group
+        allow create: if isGroupMember(groupId) && (
+          isGroupAdmin(groupId) ||
+          request.resource.data.assignedMemberId == request.auth.uid
+        );
+
+        // Members can only update their own doses and cannot reassign assignedMemberId
+        allow update: if isGroupMember(groupId) && (
+          isGroupAdmin(groupId) || (
+            resource.data.assignedMemberId == request.auth.uid &&
+            request.resource.data.assignedMemberId == request.auth.uid &&
+            request.resource.data.medicineId == resource.data.medicineId &&
+            request.resource.data.scheduledAt == resource.data.scheduledAt
+          )
+        );
+
         allow delete: if isGroupAdmin(groupId);
       }
     }

@@ -724,6 +724,10 @@ async function main() {
       createdBy: group.createdBy,
       createdAt: group.createdAt,
     });
+    await writeFirestoreDoc(`inviteCodes/${group.inviteCode}`, {
+      code: group.inviteCode,
+      groupId: group.id,
+    });
 
     for (const member of group.members) {
       await writeFirestoreDoc(`groups/${group.id}/members/${member.userId}`, member);
