@@ -128,6 +128,7 @@ class FamilyGroupRepositoryImpl @Inject constructor(
 
         // 1. Resolve invite code to target groupId
         var targetGroupId: String? = null
+        var lookupException: Exception? = null
         try {
             val inviteDoc = firestore.collection("inviteCodes").document(cleanCode).get().await()
             if (inviteDoc.exists()) {
@@ -140,6 +141,7 @@ class FamilyGroupRepositoryImpl @Inject constructor(
         } catch (e: IllegalArgumentException) {
             throw e
         } catch (e: Exception) {
+            lookupException = e
             Log.w("FamilyGroupRepo", "inviteCodes lookup failed for $cleanCode: ${e.message}")
         }
 
@@ -160,6 +162,9 @@ class FamilyGroupRepositoryImpl @Inject constructor(
         }
 
         if (targetGroupId.isNullOrBlank()) {
+            if (lookupException != null && lookupException is FirebaseFirestoreException && lookupException.code == FirebaseFirestoreException.Code.PERMISSION_DENIED) {
+                throw IllegalStateException("Permission denied. Please ensure you are signed in and try again.")
+            }
             throw IllegalArgumentException("Invite code '$cleanCode' not found. Please verify the code with your family admin.")
         }
 
