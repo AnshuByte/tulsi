@@ -1,5 +1,4 @@
 <resources>
     <string name="app_name">Tulsi</string>
     <string name="tagline">Take care, together.</string>
-    <string name="default_web_client_id" translatable="false"></string>
 </resources>
