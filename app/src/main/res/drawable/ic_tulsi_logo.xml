@@ -4,59 +4,28 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Outer Tulsi Leaf Ring / Wreath Concept -->
-    <!-- Leaf 1 (Top Left) -->
+    <!-- Calm Circular Badge (Primary Teal) -->
     <path
         android:fillColor="#0F9D8A"
-        android:pathData="M54,18 C46,18 40,24 40,32 C48,32 54,26 54,18 Z" />
+        android:pathData="M54,14 C76.09,14 94,31.91 94,54 C94,76.09 76.09,94 54,94 C31.91,94 14,76.09 14,54 C14,31.91 31.91,14 54,14 Z" />
 
-    <!-- Leaf 2 (Top Right) -->
+    <!-- Stylized Tulsi Leaf Silhouette in Pure White -->
     <path
-        android:fillColor="#13B49E"
-        android:pathData="M54,18 C62,18 68,24 68,32 C60,32 54,26 54,18 Z" />
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,28 C66,38 72,50 70,62 C68,70 62,74 54,75 C46,74 40,70 38,62 C36,50 42,38 54,28 Z" />
 
-    <!-- Leaf 3 (Right) -->
-    <path
-        android:fillColor="#0F9D8A"
-        android:pathData="M86,54 C86,46 80,40 72,40 C72,48 78,54 86,54 Z" />
-
-    <!-- Leaf 4 (Bottom Right) -->
-    <path
-        android:fillColor="#13B49E"
-        android:pathData="M68,76 C76,76 82,70 82,62 C74,62 68,68 68,76 Z" />
-
-    <!-- Leaf 5 (Bottom Left) -->
-    <path
-        android:fillColor="#0F9D8A"
-        android:pathData="M40,76 C32,76 26,70 26,62 C34,62 40,68 40,76 Z" />
-
-    <!-- Leaf 6 (Left) -->
-    <path
-        android:fillColor="#13B49E"
-        android:pathData="M22,54 C22,46 28,40 36,40 C36,48 30,54 22,54 Z" />
-
-    <!-- Enclosing Tulsi Stem Ring -->
+    <!-- Central Vein in Primary Teal -->
     <path
         android:strokeColor="#0F9D8A"
-        android:strokeWidth="3"
+        android:strokeWidth="2.5"
         android:strokeLineCap="round"
-        android:pathData="M54,22 C71.67,22 86,36.33 86,54 C86,71.67 71.67,86 54,86 C36.33,86 22,71.67 22,54 C22,36.33 36.33,22 54,22 Z" />
+        android:pathData="M54,42 L54,72" />
 
-    <!-- Central Pill / Capsule -->
-    <!-- Pill Left Half (Primary Teal) -->
-    <path
-        android:fillColor="#0F9D8A"
-        android:pathData="M42,47 L54,47 L54,61 L42,61 C38.13,61 35,57.87 35,54 C35,50.13 38.13,47 42,47 Z" />
-
-    <!-- Pill Right Half (Deep Navy) -->
-    <path
-        android:fillColor="#1B2A4A"
-        android:pathData="M54,47 L66,47 C69.87,47 73,50.13 73,54 C73,57.87 69.87,61 66,61 L54,61 Z" />
-
-    <!-- Pill Divider Line -->
+    <!-- Stem in Pure White -->
     <path
         android:strokeColor="#FFFFFF"
-        android:strokeWidth="1.5"
-        android:pathData="M54,47 L54,61" />
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:pathData="M54,75 C54,80 52,83 48,85" />
 
 </vector>

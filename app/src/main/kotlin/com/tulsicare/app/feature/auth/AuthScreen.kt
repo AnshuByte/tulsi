@@ -1,5 +1,10 @@
 package com.tulsicare.app.feature.auth
 
+import com.tulsicare.app.BuildConfig
+
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -22,10 +27,9 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -33,26 +37,31 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.ConnectionResult
+import com.google.android.gms.common.GoogleApiAvailability
+import com.google.android.gms.common.api.ApiException
 import com.tulsicare.app.R
-import com.tulsicare.app.core.designsystem.DeepNavy
 import com.tulsicare.app.core.designsystem.PrimaryTeal
-import com.tulsicare.app.core.designsystem.StatusMissedCoral
 
 @Composable
 fun AuthScreen(
@@ -60,6 +69,33 @@ fun AuthScreen(
     onAuthSuccess: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+
+    val isPlayServicesAvailable = remember(context) {
+        GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(context) == ConnectionResult.SUCCESS
+    }
+
+    val googleSignInLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+        try {
+            val account = task.getResult(ApiException::class.java)
+            val idToken = account?.idToken
+            val email = account?.email
+            val displayName = account?.displayName.orEmpty()
+            if (!idToken.isNullOrBlank()) {
+                viewModel.signInWithGoogleIdToken(idToken)
+            } else if (!email.isNullOrBlank()) {
+                viewModel.signInWithGmailDirect(email, displayName)
+            } else {
+                viewModel.showDirectGmailDialog(true)
+            }
+        } catch (e: Exception) {
+            // Smoothly fall back to direct Gmail dialog if Google Play Services is missing or unconfigured
+            viewModel.showDirectGmailDialog(true)
+        }
+    }
 
     LaunchedEffect(uiState.currentUser) {
         if (uiState.currentUser != null) {
@@ -78,9 +114,9 @@ fun AuthScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp, vertical = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Brand Mark & Quiet Header
+            // Brand Mark & Header
             Image(
                 painter = painterResource(id = R.drawable.ic_tulsi_logo),
                 contentDescription = "Tulsi",
@@ -104,70 +140,131 @@ fun AuthScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            // Quick Role Test Switcher (Clean, no emojis, quiet bordered card)
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 1.dp,
-                shadowElevation = 0.dp,
-                modifier = Modifier.fillMaxWidth()
+            // Direct Gmail / Google Sign-In (Official button)
+            OutlinedButton(
+                onClick = {
+                    if (isPlayServicesAvailable) {
+                        try {
+                            val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                                .requestEmail()
+                                .build()
+                            val client = GoogleSignIn.getClient(context, gso)
+                            googleSignInLauncher.launch(client.signInIntent)
+                        } catch (e: Exception) {
+                            viewModel.showDirectGmailDialog(true)
+                        }
+                    } else {
+                        // Directly open Gmail login modal
+                        viewModel.showDirectGmailDialog(true)
+                    }
+                },
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.ic_google_logo),
+                        contentDescription = "Google",
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
                     Text(
-                        text = "Testing profiles",
+                        text = "Continue with Google / Gmail",
                         style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold,
+                        fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurface
                     )
+                }
+            }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+            // Direct Gmail one-tap quick action link
+            TextButton(
+                onClick = { viewModel.showDirectGmailDialog(true) },
+                modifier = Modifier.height(36.dp)
+            ) {
+                Text(
+                    text = "Sign in direct with Gmail address",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = PrimaryTeal
+                )
+            }
+
+            // Testing profiles (Admin / Patient / Member - Debug/Test builds only)
+            if (BuildConfig.DEBUG) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 1.dp,
+                    shadowElevation = 0.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        OutlinedButton(
-                            onClick = { viewModel.quickSignIn("ADMIN") },
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Icon(Icons.Default.AdminPanelSettings, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Text("Asha\nAdmin", style = MaterialTheme.typography.labelSmall)
-                            }
-                        }
+                        Text(
+                            text = "Testing profiles",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
 
-                        OutlinedButton(
-                            onClick = { viewModel.quickSignIn("PATIENT") },
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.weight(1f)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            OutlinedButton(
+                                onClick = { viewModel.quickSignIn("ADMIN") },
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(1f)
                             ) {
-                                Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Text("Ravi\nPatient", style = MaterialTheme.typography.labelSmall)
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(Icons.Default.AdminPanelSettings, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Text("Asha\nAdmin", style = MaterialTheme.typography.labelSmall)
+                                }
                             }
-                        }
 
-                        OutlinedButton(
-                            onClick = { viewModel.quickSignIn("MEMBER") },
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            OutlinedButton(
+                                onClick = { viewModel.quickSignIn("PATIENT") },
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(1f)
                             ) {
-                                Icon(Icons.Default.People, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Text("Meera\nMember", style = MaterialTheme.typography.labelSmall)
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Text("Ravi\nPatient", style = MaterialTheme.typography.labelSmall)
+                                }
+                            }
+
+                            OutlinedButton(
+                                onClick = { viewModel.quickSignIn("MEMBER") },
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(Icons.Default.People, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Text("Meera\nMember", style = MaterialTheme.typography.labelSmall)
+                                }
                             }
                         }
                     }
@@ -182,7 +279,7 @@ fun AuthScreen(
             ) {
                 HorizontalDivider(modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.outlineVariant)
                 Text(
-                    text = "  or sign in with email  ",
+                    text = "  or sign in with password  ",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.outline
                 )
@@ -275,5 +372,81 @@ fun AuthScreen(
                 )
             }
         }
+    }
+
+    // Direct Gmail Dialog
+    if (uiState.showDirectGmailDialog) {
+        AlertDialog(
+            onDismissRequest = { viewModel.showDirectGmailDialog(false) },
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.ic_google_logo),
+                        contentDescription = "Google",
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Text("Sign in direct with Gmail")
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "Enter your Gmail address to sign in immediately without typing a password.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    OutlinedTextField(
+                        value = uiState.directGmailInput,
+                        onValueChange = viewModel::setDirectGmailInput,
+                        placeholder = { Text("username@gmail.com") },
+                        leadingIcon = {
+                            Icon(Icons.Default.Email, contentDescription = null, modifier = Modifier.size(20.dp))
+                        },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        singleLine = true,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    if (BuildConfig.DEBUG) {
+                        Text(
+                            text = "Quick Gmail profiles:",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            SuggestionChip(
+                                onClick = {
+                                    viewModel.signInWithGmailDirect("sharma.family@gmail.com", "Sharma Family")
+                                },
+                                label = { Text("sharma.family@gmail.com", style = MaterialTheme.typography.labelSmall) }
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.signInWithGmailDirect() },
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryTeal),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Sign in with Gmail")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.showDirectGmailDialog(false) }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }

@@ -19,7 +19,9 @@ data class AuthUiState(
     val isSignUp: Boolean = false,
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
-    val currentUser: User? = null
+    val currentUser: User? = null,
+    val showDirectGmailDialog: Boolean = false,
+    val directGmailInput: String = ""
 )
 
 @HiltViewModel
@@ -42,6 +44,8 @@ class AuthViewModel @Inject constructor(
     fun setPassword(password: String) = _uiState.update { it.copy(password = password, errorMessage = null) }
     fun setDisplayName(name: String) = _uiState.update { it.copy(displayName = name, errorMessage = null) }
     fun toggleAuthMode() = _uiState.update { it.copy(isSignUp = !it.isSignUp, errorMessage = null) }
+    fun showDirectGmailDialog(show: Boolean) = _uiState.update { it.copy(showDirectGmailDialog = show, errorMessage = null) }
+    fun setDirectGmailInput(input: String) = _uiState.update { it.copy(directGmailInput = input, errorMessage = null) }
 
     fun submit() {
         val state = _uiState.value
@@ -71,6 +75,48 @@ class AuthViewModel @Inject constructor(
                 },
                 onFailure = { error ->
                     _uiState.update { it.copy(isLoading = false, errorMessage = error.localizedMessage ?: "Authentication failed") }
+                }
+            )
+        }
+    }
+
+    fun signInWithGoogleIdToken(idToken: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            val result = authRepository.signInWithGoogle(idToken)
+            result.fold(
+                onSuccess = { user ->
+                    _uiState.update { it.copy(isLoading = false, currentUser = user) }
+                },
+                onFailure = { error ->
+                    _uiState.update { it.copy(isLoading = false, errorMessage = error.localizedMessage ?: "Google sign in failed") }
+                }
+            )
+        }
+    }
+
+    fun signInWithGmailDirect(email: String? = null, displayName: String = "") {
+        val targetEmail = email?.trim() ?: _uiState.value.directGmailInput.trim()
+        if (targetEmail.isBlank()) {
+            _uiState.update { it.copy(errorMessage = "Please enter your Gmail address") }
+            return
+        }
+
+        val fullEmail = if (!targetEmail.contains("@")) {
+            "$targetEmail@gmail.com"
+        } else {
+            targetEmail
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            val result = authRepository.signInWithGmailDirect(fullEmail, displayName)
+            result.fold(
+                onSuccess = { user ->
+                    _uiState.update { it.copy(isLoading = false, currentUser = user, showDirectGmailDialog = false) }
+                },
+                onFailure = { error ->
+                    _uiState.update { it.copy(isLoading = false, errorMessage = error.localizedMessage ?: "Gmail sign in failed") }
                 }
             )
         }
