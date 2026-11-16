@@ -15,5 +15,6 @@ interface AuthRepository {
     suspend fun deleteAccount(): Result<Unit>
     suspend fun signOut()
     suspend fun updateUserProfile(user: User): Result<Unit>
+    suspend fun updateDisplayName(name: String): Result<Unit>
     suspend fun updateCurrentGroupId(groupId: String): Result<Unit>
 }

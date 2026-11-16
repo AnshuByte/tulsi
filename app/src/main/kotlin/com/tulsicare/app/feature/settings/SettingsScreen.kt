@@ -31,6 +31,8 @@ import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.TouchApp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -68,6 +70,7 @@ fun SettingsScreen(
     preReminderLeadMinutes: Int = 10,
     onToggleSimpleMode: (Boolean) -> Unit,
     onSetPreReminderLeadMinutes: (Int) -> Unit = {},
+    onUpdateDisplayName: (String) -> Unit = {},
     onNavigateToReliability: () -> Unit,
     onTriggerTestAlarm: () -> Unit,
     onSignOut: () -> Unit,
@@ -79,6 +82,8 @@ fun SettingsScreen(
     var showMedicalDisclaimer by remember { mutableStateOf(false) }
     var showAboutDialog by remember { mutableStateOf(false) }
     var showPreReminderDialog by remember { mutableStateOf(false) }
+    var showEditNameDialog by remember { mutableStateOf(false) }
+    var editedName by remember { mutableStateOf("") }
 
     Box(
         modifier = modifier.fillMaxSize().background(colors.background)
@@ -127,6 +132,19 @@ fun SettingsScreen(
                                 color = colors.textPrimary
                             )
                         }
+                    },
+                    trailingContent = {
+                        TulsiTextButton(
+                            text = "Edit",
+                            onClick = {
+                                editedName = displayName
+                                showEditNameDialog = true
+                            }
+                        )
+                    },
+                    onClick = {
+                        editedName = displayName
+                        showEditNameDialog = true
                     },
                     showDivider = true
                 )
@@ -434,6 +452,58 @@ fun SettingsScreen(
                     TulsiTextButton(
                         text = "Close",
                         onClick = { showPreReminderDialog = false }
+                    )
+                }
+            )
+        }
+
+        // Edit Name Dialog
+        if (showEditNameDialog) {
+            AlertDialog(
+                onDismissRequest = { showEditNameDialog = false },
+                containerColor = colors.surface,
+                title = {
+                    Text(
+                        text = "Edit name",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = colors.textPrimary
+                    )
+                },
+                text = {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        OutlinedTextField(
+                            value = editedName,
+                            onValueChange = { editedName = it },
+                            singleLine = true,
+                            placeholder = { Text("Enter your name", color = colors.textSecondary) },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = colors.buttonPrimary,
+                                unfocusedBorderColor = colors.border,
+                                focusedTextColor = colors.textPrimary,
+                                unfocusedTextColor = colors.textPrimary,
+                                cursorColor = colors.buttonPrimary
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                },
+                confirmButton = {
+                    TulsiButton(
+                        text = "Save",
+                        onClick = {
+                            val clean = editedName.trim()
+                            if (clean.isNotBlank()) {
+                                onUpdateDisplayName(clean)
+                                showEditNameDialog = false
+                            }
+                        }
+                    )
+                },
+                dismissButton = {
+                    TulsiTextButton(
+                        text = "Cancel",
+                        onClick = { showEditNameDialog = false }
                     )
                 }
             )

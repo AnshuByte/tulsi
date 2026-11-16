@@ -149,102 +149,103 @@ class HomeViewModel @Inject constructor(
             }
             _uiState.update { it.copy(currentUser = user) }
 
-            val groupId = user.currentGroupId.orEmpty()
-            if (groupId.isBlank()) {
+            val rawGroupId = user.currentGroupId.orEmpty()
+            val effectiveGroupId = rawGroupId.ifBlank { "default_group" }
+
+            if (rawGroupId.isBlank()) {
                 _uiState.update {
                     it.copy(
                         currentGroup = null,
-                        todayDoses = emptyList(),
-                        medicines = emptyList(),
                         members = emptyList(),
-                        isLoading = false,
+                        isAdmin = true,
                         isRestoringData = false
                     )
                 }
-                return@launch
-            }
-
-            // -------------------------------------------------------------
-            // Login Rehydration (Rule 5):
-            // Check if Room is empty for this group. If empty, fetch
-            // group, members, medicines, schedules, and doses from Firestore.
-            // -------------------------------------------------------------
-            val localMeds = database.medicineDao().getActiveMedicines(groupId)
-            if (localMeds.isEmpty()) {
-                _uiState.update { it.copy(isRestoringData = true) }
-                try {
-                    // 1. Group & Members
-                    val groupDoc = firestore.collection("groups").document(groupId).get().await()
-                    val group = groupDoc.toObject(FamilyGroup::class.java)?.copy(id = groupDoc.id)
-                    if (group != null) {
-                        database.familyGroupDao().insertGroup(group.toEntity())
-                    }
-                    val membersSnap = firestore.collection("groups").document(groupId).collection("members").get().await()
-                    val members = membersSnap.documents.mapNotNull { it.toObject(GroupMember::class.java) }
-                    if (members.isNotEmpty()) {
-                        database.familyGroupDao().insertMembers(members.map { it.toEntity(groupId) })
-                    }
-
-                    // 2. Fetch medicines
-                    val medsSnap = firestore.collection("groups").document(groupId).collection("medicines")
-                        .whereEqualTo("isActive", true).get().await()
-                    val meds = medsSnap.documents.mapNotNull { doc -> doc.toObject(Medicine::class.java)?.copy(id = doc.id) }
-                    if (meds.isNotEmpty()) {
-                        database.medicineDao().insertMedicines(meds.map { it.toEntity() })
-                    }
-
-                    // 3. Fetch schedules
-                    val schedSnap = firestore.collection("groups").document(groupId).collection("schedules")
-                        .whereEqualTo("isActive", true).get().await()
-                    val schedules = schedSnap.documents.mapNotNull { doc -> doc.toObject(Schedule::class.java)?.copy(id = doc.id) }
-                    if (schedules.isNotEmpty()) {
-                        database.scheduleDao().insertSchedules(schedules.map { it.toEntity() })
-                    }
-
-                    // 4. Fetch current day's doses
-                    val calendar = Calendar.getInstance().apply {
-                        set(Calendar.HOUR_OF_DAY, 0)
-                        set(Calendar.MINUTE, 0)
-                        set(Calendar.SECOND, 0)
-                        set(Calendar.MILLISECOND, 0)
-                    }
-                    val startOfDay = calendar.timeInMillis
-                    calendar.set(Calendar.HOUR_OF_DAY, 23)
-                    calendar.set(Calendar.MINUTE, 59)
-                    calendar.set(Calendar.SECOND, 59)
-                    val endOfDay = calendar.timeInMillis
-
-                    val dosesSnap = firestore.collection("groups").document(groupId).collection("doseEvents")
-                        .whereGreaterThanOrEqualTo("scheduledAt", startOfDay)
-                        .whereLessThanOrEqualTo("scheduledAt", endOfDay)
-                        .get().await()
-                    val doses = dosesSnap.documents.mapNotNull { doc -> doc.toObject(DoseEvent::class.java)?.copy(id = doc.id) }
-                    if (doses.isNotEmpty()) {
-                        database.doseEventDao().insertDoseEvents(doses.map { it.toEntity() })
-                    }
-
-                    // 5. Generate today's doses if missing
-                    doseEventRepository.generateTodayDosesIfMissing(groupId)
-
-                    // 6. Rebuild alarms
-                    ExactAlarmScheduler.rescheduleAll(context)
-
-                    _uiState.update { it.copy(isRestoringData = false, restorationError = null) }
-                } catch (e: Exception) {
-                    _uiState.update {
-                        it.copy(
-                            isRestoringData = false,
-                            restorationError = "Could not sync your data. Tap to retry."
-                        )
-                    }
-                }
-            } else {
-                doseEventRepository.generateTodayDosesIfMissing(groupId)
+                doseEventRepository.generateTodayDosesIfMissing(effectiveGroupId)
                 ExactAlarmScheduler.rescheduleAll(context)
-            }
+            } else {
+                // -------------------------------------------------------------
+                // Login Rehydration (Rule 5):
+                // Check if Room is empty for this group. If empty, fetch
+                // group, members, medicines, schedules, and doses from Firestore.
+                // -------------------------------------------------------------
+                val localMeds = database.medicineDao().getActiveMedicines(rawGroupId)
+                if (localMeds.isEmpty()) {
+                    _uiState.update { it.copy(isRestoringData = true) }
+                    try {
+                        // 1. Group & Members
+                        val groupDoc = firestore.collection("groups").document(rawGroupId).get().await()
+                        val group = groupDoc.toObject(FamilyGroup::class.java)?.copy(id = groupDoc.id)
+                        if (group != null) {
+                            database.familyGroupDao().insertGroup(group.toEntity())
+                        }
+                        val membersSnap = firestore.collection("groups").document(rawGroupId).collection("members").get().await()
+                        val members = membersSnap.documents.mapNotNull { it.toObject(GroupMember::class.java) }
+                        if (members.isNotEmpty()) {
+                            database.familyGroupDao().insertMembers(members.map { it.toEntity(rawGroupId) })
+                        }
 
-            val group = familyGroupRepository.getGroup(groupId)
-            _uiState.update { it.copy(currentGroup = group) }
+                        // 2. Fetch medicines
+                        val medsSnap = firestore.collection("groups").document(rawGroupId).collection("medicines")
+                            .whereEqualTo("isActive", true).get().await()
+                        val meds = medsSnap.documents.mapNotNull { doc -> doc.toObject(Medicine::class.java)?.copy(id = doc.id) }
+                        if (meds.isNotEmpty()) {
+                            database.medicineDao().insertMedicines(meds.map { it.toEntity() })
+                        }
+
+                        // 3. Fetch schedules
+                        val schedSnap = firestore.collection("groups").document(rawGroupId).collection("schedules")
+                            .whereEqualTo("isActive", true).get().await()
+                        val schedules = schedSnap.documents.mapNotNull { doc -> doc.toObject(Schedule::class.java)?.copy(id = doc.id) }
+                        if (schedules.isNotEmpty()) {
+                            database.scheduleDao().insertSchedules(schedules.map { it.toEntity() })
+                        }
+
+                        // 4. Fetch current day's doses
+                        val calendar = Calendar.getInstance().apply {
+                            set(Calendar.HOUR_OF_DAY, 0)
+                            set(Calendar.MINUTE, 0)
+                            set(Calendar.SECOND, 0)
+                            set(Calendar.MILLISECOND, 0)
+                        }
+                        val startOfDay = calendar.timeInMillis
+                        calendar.set(Calendar.HOUR_OF_DAY, 23)
+                        calendar.set(Calendar.MINUTE, 59)
+                        calendar.set(Calendar.SECOND, 59)
+                        val endOfDay = calendar.timeInMillis
+
+                        val dosesSnap = firestore.collection("groups").document(rawGroupId).collection("doseEvents")
+                            .whereGreaterThanOrEqualTo("scheduledAt", startOfDay)
+                            .whereLessThanOrEqualTo("scheduledAt", endOfDay)
+                            .get().await()
+                        val doses = dosesSnap.documents.mapNotNull { doc -> doc.toObject(DoseEvent::class.java)?.copy(id = doc.id) }
+                        if (doses.isNotEmpty()) {
+                            database.doseEventDao().insertDoseEvents(doses.map { it.toEntity() })
+                        }
+
+                        // 5. Generate today's doses if missing
+                        doseEventRepository.generateTodayDosesIfMissing(rawGroupId)
+
+                        // 6. Rebuild alarms
+                        ExactAlarmScheduler.rescheduleAll(context)
+
+                        _uiState.update { it.copy(isRestoringData = false, restorationError = null) }
+                    } catch (e: Exception) {
+                        _uiState.update {
+                            it.copy(
+                                isRestoringData = false,
+                                restorationError = "Could not sync your data. Tap to retry."
+                            )
+                        }
+                    }
+                } else {
+                    doseEventRepository.generateTodayDosesIfMissing(rawGroupId)
+                    ExactAlarmScheduler.rescheduleAll(context)
+                }
+
+                val group = familyGroupRepository.getGroup(rawGroupId)
+                _uiState.update { it.copy(currentGroup = group) }
+            }
 
             val calendar = Calendar.getInstance().apply {
                 set(Calendar.HOUR_OF_DAY, 0)
@@ -259,26 +260,28 @@ class HomeViewModel @Inject constructor(
             val endOfDay = calendar.timeInMillis
 
             launch {
-                doseEventRepository.observeEventsForDateRange(groupId, startOfDay, endOfDay)
+                doseEventRepository.observeEventsForDateRange(effectiveGroupId, startOfDay, endOfDay)
                     .collectLatest { events ->
                         _uiState.update { it.copy(todayDoses = events) }
                     }
             }
 
             launch {
-                medicineRepository.observeActiveMedicines(groupId)
+                medicineRepository.observeActiveMedicines(effectiveGroupId)
                     .collectLatest { meds ->
                         _uiState.update { it.copy(medicines = meds, isLoading = false) }
                     }
             }
 
-            launch {
-                familyGroupRepository.observeMembers(groupId)
-                    .collectLatest { membersList ->
-                        val currentUid = user.id
-                        val admin = membersList.any { it.userId == currentUid && it.role == MemberRole.ADMIN }
-                        _uiState.update { it.copy(members = membersList, isAdmin = admin) }
-                    }
+            if (rawGroupId.isNotBlank()) {
+                launch {
+                    familyGroupRepository.observeMembers(rawGroupId)
+                        .collectLatest { membersList ->
+                            val currentUid = user.id
+                            val admin = membersList.any { it.userId == currentUid && it.role == MemberRole.ADMIN }
+                            _uiState.update { it.copy(members = membersList, isAdmin = admin) }
+                        }
+                }
             }
         }
     }

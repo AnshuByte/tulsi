@@ -24,27 +24,33 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Medication
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tulsicare.app.core.designsystem.TulsiBorderWidth
 import com.tulsicare.app.core.designsystem.TulsiCornerRadius
 import com.tulsicare.app.core.designsystem.TulsiScreenPadding
 import com.tulsicare.app.core.designsystem.TulsiTheme
 import com.tulsicare.app.core.designsystem.component.TulsiButton
-import com.tulsicare.app.core.designsystem.component.TulsiEmptyState
 import com.tulsicare.app.core.designsystem.component.TulsiListRow
 import com.tulsicare.app.core.designsystem.component.TulsiSectionHeader
 import com.tulsicare.app.core.designsystem.component.TulsiStatusDot
@@ -54,39 +60,110 @@ import com.tulsicare.app.core.model.DoseStatus
 import com.tulsicare.app.core.model.FamilyGroup
 import com.tulsicare.app.core.model.GroupMember
 import com.tulsicare.app.core.model.MemberRole
+import com.tulsicare.app.feature.medicine.AddEditMedicineViewModel
+import com.tulsicare.app.feature.medicine.AddMedicineBottomSheet
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
+private val TulsiGreen = Color(0xFF3ECF8E)
+
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel,
-    onNavigateToAddMedicine: () -> Unit,
-    onNavigateToEditMedicine: (medicineId: String) -> Unit,
+    onNavigateToAddMedicine: () -> Unit = {},
+    onNavigateToEditMedicine: (medicineId: String) -> Unit = {},
+    onNavigateToFamily: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    var showAddMedicineSheet by remember { mutableStateOf(false) }
+    var showFamilyPromptDialog by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+
+    fun openAddMedicineSheet() {
+        showAddMedicineSheet = true
+    }
 
     HomeScreenContent(
         uiState = uiState,
-        onNavigateToAddMedicine = onNavigateToAddMedicine,
+        onOpenAddMedicine = ::openAddMedicineSheet,
         onSelectMember = viewModel::selectMember,
         onMarkTaken = viewModel::markDoseTaken,
         onMarkSkipped = viewModel::markDoseSkipped,
         onRetry = viewModel::loadData,
+        snackbarHostState = snackbarHostState,
         modifier = modifier
     )
+
+    if (showAddMedicineSheet) {
+        val addMedViewModel: AddEditMedicineViewModel = hiltViewModel()
+        AddMedicineBottomSheet(
+            viewModel = addMedViewModel,
+            onDismiss = { showAddMedicineSheet = false },
+            onSaveSuccess = { medicineName, nextDoseTime ->
+                showAddMedicineSheet = false
+                viewModel.loadData()
+                scope.launch {
+                    snackbarHostState.showSnackbar("$medicineName added. Next dose $nextDoseTime.")
+                }
+                if (uiState.members.isEmpty() || uiState.currentGroup == null) {
+                    showFamilyPromptDialog = true
+                }
+            }
+        )
+    }
+
+    if (showFamilyPromptDialog) {
+        AlertDialog(
+            onDismissRequest = { showFamilyPromptDialog = false },
+            containerColor = Color(0xFF1E1E1E),
+            title = {
+                Text(
+                    text = "Family Alerts",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White
+                )
+            },
+            text = {
+                Text(
+                    text = "Add a family member to get missed-dose alerts.",
+                    fontSize = 14.sp,
+                    color = Color(0xFFCCCCCC)
+                )
+            },
+            confirmButton = {
+                TulsiButton(
+                    text = "Go to Family",
+                    onClick = {
+                        showFamilyPromptDialog = false
+                        onNavigateToFamily()
+                    }
+                )
+            },
+            dismissButton = {
+                TulsiTextButton(
+                    text = "Dismiss",
+                    onClick = { showFamilyPromptDialog = false }
+                )
+            }
+        )
+    }
 }
 
 @Composable
 fun HomeScreenContent(
     uiState: HomeUiState,
-    onNavigateToAddMedicine: () -> Unit,
+    onOpenAddMedicine: () -> Unit,
     onSelectMember: (String?) -> Unit,
     onMarkTaken: (String) -> Unit,
     onMarkSkipped: (String) -> Unit,
     onRetry: () -> Unit = {},
+    snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
     modifier: Modifier = Modifier
 ) {
     val colors = TulsiTheme.colors
@@ -104,7 +181,14 @@ fun HomeScreenContent(
 
     val totalDoses = filteredDoses.size
     val takenDoses = filteredDoses.count { it.status == DoseStatus.TAKEN }
-    val progressSubtext = if (totalDoses > 0) "$takenDoses of $totalDoses taken" else "No scheduled doses today"
+    val allDosesTaken = totalDoses > 0 && takenDoses == totalDoses
+
+    // Subtitle logic
+    val progressSubtext = when {
+        totalDoses > 0 -> "$takenDoses of $totalDoses taken"
+        uiState.currentGroup == null -> "Family circle: not set up"
+        else -> ""
+    }
 
     // Group doses into Morning, Afternoon, Evening
     val groupedDoses = groupDosesByTimeOfDay(filteredDoses)
@@ -113,47 +197,58 @@ fun HomeScreenContent(
         modifier = modifier.fillMaxSize(),
         containerColor = colors.background,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
-            // Single black circular button with '+'
-            FloatingActionButton(
-                onClick = onNavigateToAddMedicine,
-                containerColor = colors.buttonPrimary,
-                contentColor = colors.buttonText,
-                shape = CircleShape,
-                modifier = Modifier.size(56.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = "Add Medicine",
-                    tint = colors.buttonText,
-                    modifier = Modifier.size(24.dp)
-                )
+            // Show FAB ONLY when medicines/doses exist
+            if (filteredDoses.isNotEmpty()) {
+                FloatingActionButton(
+                    onClick = onOpenAddMedicine,
+                    containerColor = colors.buttonPrimary,
+                    contentColor = colors.buttonText,
+                    shape = CircleShape,
+                    modifier = Modifier.size(56.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Add Medicine",
+                        tint = colors.buttonText,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
             }
         }
     ) { innerPadding ->
-        LazyColumn(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(bottom = 20.dp)
+                .padding(innerPadding)
         ) {
-            // Title & subtext header
-            item(key = "header") {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = TulsiScreenPadding, end = TulsiScreenPadding, top = 8.dp, bottom = 12.dp)
-                ) {
+            // Top Date Header
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = TulsiScreenPadding, end = TulsiScreenPadding, top = 12.dp, bottom = 8.dp)
+            ) {
+                if (progressSubtext.isNotBlank() && totalDoses == 0) {
                     Text(
-                        text = todayFormatted,
-                        fontSize = 28.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = colors.textPrimary,
-                        letterSpacing = (-0.5).sp
+                        text = progressSubtext,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Normal,
+                        color = colors.textSecondary
                     )
+                    Spacer(modifier = Modifier.height(2.dp))
+                }
 
+                Text(
+                    text = todayFormatted,
+                    fontSize = 26.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.textPrimary,
+                    letterSpacing = (-0.5).sp
+                )
+
+                if (totalDoses > 0) {
                     Spacer(modifier = Modifier.height(4.dp))
-
                     Text(
                         text = progressSubtext,
                         fontSize = 14.sp,
@@ -163,160 +258,246 @@ fun HomeScreenContent(
                 }
             }
 
-            // Restoring from Cloud Loading Banner
+            // Restoring / Syncing Banner
             if (uiState.isRestoringData) {
-                item(key = "restoring_banner") {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = TulsiScreenPadding, vertical = 6.dp)
-                            .background(Color(0xFF1E1E1E), RoundedCornerShape(TulsiCornerRadius))
-                            .padding(12.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "Restoring your data...",
-                            fontSize = 14.sp,
-                            color = Color(0xFFDDDDDD),
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = TulsiScreenPadding, vertical = 6.dp)
+                        .background(Color(0xFF1E1E1E), RoundedCornerShape(TulsiCornerRadius))
+                        .padding(12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Restoring your data...",
+                        fontSize = 14.sp,
+                        color = Color(0xFFDDDDDD),
+                        fontWeight = FontWeight.Medium
+                    )
                 }
             }
 
             // Restoration Error Banner with Retry
             if (uiState.restorationError != null) {
-                item(key = "restoration_error_banner") {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = TulsiScreenPadding, vertical = 6.dp)
-                            .background(Color(0xFF2B1A1A), RoundedCornerShape(TulsiCornerRadius))
-                            .padding(12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = uiState.restorationError,
-                            fontSize = 13.sp,
-                            color = Color(0xFFFF9999),
-                            modifier = Modifier.weight(1f)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        TulsiButton(
-                            text = "Retry",
-                            onClick = onRetry
-                        )
-                    }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = TulsiScreenPadding, vertical = 6.dp)
+                        .background(Color(0xFF2B1A1A), RoundedCornerShape(TulsiCornerRadius))
+                        .padding(12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = uiState.restorationError,
+                        fontSize = 13.sp,
+                        color = Color(0xFFFF9999),
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    TulsiButton(
+                        text = "Retry",
+                        onClick = onRetry
+                    )
                 }
             }
 
             // Admin Person Filter Chips
-            if (uiState.isAdmin && uiState.members.isNotEmpty()) {
-                item(key = "admin_filter") {
-                    LazyRow(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 12.dp),
-                        contentPadding = PaddingValues(horizontal = TulsiScreenPadding),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        item {
-                            PersonChip(
-                                label = "Everyone",
-                                isSelected = uiState.selectedMemberId == null,
-                                onClick = { onSelectMember(null) }
-                            )
-                        }
-                        items(uiState.members, key = { it.userId }) { member ->
-                            PersonChip(
-                                label = member.displayName.ifBlank { "Member" },
-                                isSelected = uiState.selectedMemberId == member.userId,
-                                onClick = { onSelectMember(member.userId) }
-                            )
-                        }
+            if (uiState.isAdmin && uiState.members.isNotEmpty() && totalDoses > 0) {
+                LazyRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp),
+                    contentPadding = PaddingValues(horizontal = TulsiScreenPadding),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    item {
+                        PersonChip(
+                            label = "Everyone",
+                            isSelected = uiState.selectedMemberId == null,
+                            onClick = { onSelectMember(null) }
+                        )
+                    }
+                    items(uiState.members, key = { it.userId }) { member ->
+                        PersonChip(
+                            label = member.displayName.ifBlank { "Member" },
+                            isSelected = uiState.selectedMemberId == member.userId,
+                            onClick = { onSelectMember(member.userId) }
+                        )
                     }
                 }
             }
 
-            // Empty State
+            // Content Area: Empty State OR Dose List
             if (filteredDoses.isEmpty()) {
-                item(key = "empty_state") {
-                    Spacer(modifier = Modifier.height(48.dp))
-                    TulsiEmptyState(
-                        title = "No doses scheduled",
-                        message = "All doses for today have been taken or there are no medicines scheduled.",
-                        actionButton = {
-                            TulsiButton(
-                                text = "Add a medicine",
-                                onClick = onNavigateToAddMedicine
+                // Calm, vertically centered empty state
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .padding(TulsiScreenPadding),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        // Circular pill badge
+                        Box(
+                            modifier = Modifier
+                                .size(64.dp)
+                                .background(Color(0xFF16251E), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Medication,
+                                contentDescription = null,
+                                tint = TulsiGreen,
+                                modifier = Modifier.size(32.dp)
                             )
                         }
-                    )
+
+                        Spacer(modifier = Modifier.height(20.dp))
+
+                        Text(
+                            text = "No medicines yet",
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = colors.textPrimary
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Text(
+                            text = "Add your first medicine to get reminders.",
+                            fontSize = 14.sp,
+                            color = colors.textSecondary,
+                            lineHeight = 20.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(24.dp))
+
+                        TulsiButton(
+                            text = "Add a medicine",
+                            onClick = onOpenAddMedicine,
+                            modifier = Modifier.width(180.dp)
+                        )
+                    }
                 }
             } else {
-                // Render doses grouped by time of day (Morning, Afternoon, Evening)
-                groupedDoses.forEach { (timeSlot, doses) ->
-                    item(key = "section_$timeSlot") {
-                        TulsiSectionHeader(title = timeSlot)
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    contentPadding = PaddingValues(bottom = 24.dp)
+                ) {
+                    // "All done for today" check banner
+                    if (allDosesTaken) {
+                        item(key = "all_done_banner") {
+                            val firstDoseTime = filteredDoses.firstOrNull()?.let { formatDoseTime(it.scheduledAt) } ?: "08:00"
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = TulsiScreenPadding, vertical = 8.dp)
+                                    .background(Color(0xFF15221B), RoundedCornerShape(16.dp))
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .background(TulsiGreen, CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = "Completed",
+                                        tint = Color.Black,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                Column {
+                                    Text(
+                                        text = "All done for today",
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color.White
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "Next: $firstDoseTime tomorrow",
+                                        fontSize = 13.sp,
+                                        color = Color(0xFFAAAAAA)
+                                    )
+                                }
+                            }
+                        }
                     }
 
-                    items(doses, key = { it.id }) { doseEvent ->
-                        val isPending = doseEvent.status == DoseStatus.PENDING
-                        val isTaken = doseEvent.status == DoseStatus.TAKEN
-                        val timeStr = formatDoseTime(doseEvent.scheduledAt)
+                    // Render doses grouped by time of day (Morning, Afternoon, Evening)
+                    groupedDoses.forEach { (timeSlot, doses) ->
+                        item(key = "section_$timeSlot") {
+                            TulsiSectionHeader(title = timeSlot)
+                        }
 
-                        TulsiListRow(
-                            title = doseEvent.medicineName,
-                            subtitle = "${doseEvent.dosage} · $timeStr",
-                            leadingContent = {
-                                if (isTaken) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(24.dp)
-                                            .background(colors.accent, CircleShape),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Check,
-                                            contentDescription = "Taken",
-                                            tint = Color.White,
-                                            modifier = Modifier.size(16.dp)
+                        items(doses, key = { it.id }) { doseEvent ->
+                            val isPending = doseEvent.status == DoseStatus.PENDING
+                            val isTaken = doseEvent.status == DoseStatus.TAKEN
+                            val timeStr = formatDoseTime(doseEvent.scheduledAt)
+
+                            TulsiListRow(
+                                title = doseEvent.medicineName,
+                                subtitle = "${doseEvent.dosage} · $timeStr",
+                                leadingContent = {
+                                    if (isTaken) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(24.dp)
+                                                .background(colors.accent, CircleShape),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Check,
+                                                contentDescription = "Taken",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    } else {
+                                        TulsiStatusDot(
+                                            status = doseEvent.status,
+                                            showLabel = false,
+                                            dotSize = 10.dp
                                         )
                                     }
-                                } else {
-                                    TulsiStatusDot(
-                                        status = doseEvent.status,
-                                        showLabel = false,
-                                        dotSize = 10.dp
-                                    )
-                                }
-                            },
-                            trailingContent = {
-                                if (isPending) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        TulsiTextButton(
-                                            text = "Skip",
-                                            onClick = { onMarkSkipped(doseEvent.id) },
-                                            textColor = colors.textSecondary
-                                        )
-                                        TulsiButton(
-                                            text = "Take",
-                                            onClick = { onMarkTaken(doseEvent.id) }
+                                },
+                                trailingContent = {
+                                    if (isPending) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            TulsiTextButton(
+                                                text = "Skip",
+                                                onClick = { onMarkSkipped(doseEvent.id) },
+                                                textColor = colors.textSecondary
+                                            )
+                                            TulsiButton(
+                                                text = "Take",
+                                                onClick = { onMarkTaken(doseEvent.id) }
+                                            )
+                                        }
+                                    } else {
+                                        TulsiStatusDot(
+                                            status = doseEvent.status,
+                                            showLabel = true
                                         )
                                     }
-                                } else {
-                                    TulsiStatusDot(
-                                        status = doseEvent.status,
-                                        showLabel = true
-                                    )
-                                }
-                            },
-                            showDivider = true
-                        )
+                                },
+                                showDivider = true
+                            )
+                        }
                     }
                 }
             }
@@ -331,12 +512,10 @@ private fun PersonChip(
     onClick: () -> Unit
 ) {
     val colors = TulsiTheme.colors
-
     Box(
         modifier = Modifier
-            .clickable(onClick = onClick)
             .background(
-                color = if (isSelected) colors.buttonPrimary else Color.Transparent,
+                color = if (isSelected) colors.buttonPrimary else colors.surface,
                 shape = RoundedCornerShape(TulsiCornerRadius)
             )
             .border(
@@ -344,105 +523,37 @@ private fun PersonChip(
                 color = if (isSelected) colors.buttonPrimary else colors.border,
                 shape = RoundedCornerShape(TulsiCornerRadius)
             )
-            .padding(horizontal = 14.dp, vertical = 7.dp),
-        contentAlignment = Alignment.Center
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 8.dp)
     ) {
         Text(
             text = label,
-            fontSize = 14.sp,
-            fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal,
+            fontSize = 13.sp,
+            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
             color = if (isSelected) colors.buttonText else colors.textPrimary
         )
     }
 }
 
 private fun groupDosesByTimeOfDay(doses: List<DoseEvent>): Map<String, List<DoseEvent>> {
-    val morning = mutableListOf<DoseEvent>()
-    val afternoon = mutableListOf<DoseEvent>()
-    val evening = mutableListOf<DoseEvent>()
+    val sorted = doses.sortedBy { it.scheduledAt }
+    val grouped = linkedMapOf<String, MutableList<DoseEvent>>()
 
-    val calendar = Calendar.getInstance()
-    doses.sortedBy { it.scheduledAt }.forEach { dose ->
-        calendar.timeInMillis = dose.scheduledAt
+    for (dose in sorted) {
+        val calendar = Calendar.getInstance().apply { timeInMillis = dose.scheduledAt }
         val hour = calendar.get(Calendar.HOUR_OF_DAY)
-        when {
-            hour < 12 -> morning.add(dose)
-            hour < 17 -> afternoon.add(dose)
-            else -> evening.add(dose)
+        val timeSlot = when {
+            hour < 12 -> "Morning"
+            hour < 17 -> "Afternoon"
+            else -> "Evening"
         }
+        grouped.getOrPut(timeSlot) { mutableListOf() }.add(dose)
     }
 
-    val result = mutableMapOf<String, List<DoseEvent>>()
-    if (morning.isNotEmpty()) result["Morning"] = morning
-    if (afternoon.isNotEmpty()) result["Afternoon"] = afternoon
-    if (evening.isNotEmpty()) result["Evening"] = evening
-    return result
+    return grouped
 }
 
-private fun formatDoseTime(epochMillis: Long): String {
-    val sdf = SimpleDateFormat("h:mm a", Locale.getDefault())
-    return sdf.format(Date(epochMillis))
-}
-
-// -----------------------------------------------------------------------------
-// Previews: Light, Dark, 1.5x Font Scale
-// -----------------------------------------------------------------------------
-
-@Preview(name = "Today - Light", showBackground = true)
-@Composable
-fun HomeScreenPreviewLight() {
-    TulsiTheme(darkTheme = false) {
-        HomeScreenContent(
-            uiState = getSampleHomeUiState(),
-            onNavigateToAddMedicine = {},
-            onSelectMember = {},
-            onMarkTaken = {},
-            onMarkSkipped = {}
-        )
-    }
-}
-
-@Preview(name = "Today - Dark", showBackground = true)
-@Composable
-fun HomeScreenPreviewDark() {
-    TulsiTheme(darkTheme = true) {
-        HomeScreenContent(
-            uiState = getSampleHomeUiState(),
-            onNavigateToAddMedicine = {},
-            onSelectMember = {},
-            onMarkTaken = {},
-            onMarkSkipped = {}
-        )
-    }
-}
-
-@Preview(name = "Today - 1.5x Font Scale", fontScale = 1.5f, showBackground = true)
-@Composable
-fun HomeScreenPreviewLargeFont() {
-    TulsiTheme(darkTheme = false) {
-        HomeScreenContent(
-            uiState = getSampleHomeUiState(),
-            onNavigateToAddMedicine = {},
-            onSelectMember = {},
-            onMarkTaken = {},
-            onMarkSkipped = {}
-        )
-    }
-}
-
-private fun getSampleHomeUiState(): HomeUiState {
-    val now = System.currentTimeMillis()
-    return HomeUiState(
-        todayDoses = listOf(
-            DoseEvent(id = "1", medicineName = "Metformin", dosage = "500mg", scheduledAt = now, status = DoseStatus.PENDING),
-            DoseEvent(id = "2", medicineName = "Aspirin", dosage = "75mg", scheduledAt = now, status = DoseStatus.TAKEN),
-            DoseEvent(id = "3", medicineName = "Atorvastatin", dosage = "20mg", scheduledAt = now + 36000000L, status = DoseStatus.PENDING)
-        ),
-        isAdmin = true,
-        members = listOf(
-            GroupMember(userId = "1", displayName = "Asha", role = MemberRole.ADMIN),
-            GroupMember(userId = "2", displayName = "Ravi", role = MemberRole.MEMBER)
-        ),
-        isLoading = false
-    )
+private fun formatDoseTime(timestamp: Long): String {
+    val format = SimpleDateFormat("HH:mm", Locale.getDefault())
+    return format.format(Date(timestamp))
 }

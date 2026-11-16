@@ -1,4 +1,4 @@
-﻿package com.tulsicare.app.core.database.dao
+package com.tulsicare.app.core.database.dao
 
 import androidx.room.Dao
 import androidx.room.Insert
@@ -31,6 +31,9 @@ interface FamilyGroupDao {
 
     @Query("SELECT * FROM group_members WHERE groupId = :groupId ORDER BY joinedAt ASC")
     suspend fun getMembers(groupId: String): List<GroupMemberEntity>
+
+    @Query("UPDATE group_members SET displayName = :displayName WHERE userId = :userId AND groupId = :groupId")
+    suspend fun updateMemberDisplayName(userId: String, groupId: String, displayName: String)
 
     @Query("DELETE FROM group_members WHERE userId = :userId AND groupId = :groupId")
     suspend fun deleteMember(userId: String, groupId: String)

@@ -68,10 +68,7 @@ class FamilyGroupRepositoryImpl @Inject constructor(
             createdAt = System.currentTimeMillis()
         )
 
-        // 1. Create group in Firestore
-        firestore.collection("groups").document(groupId).set(group).await()
-
-        // 2. Add creator as ADMIN member FIRST so that isGroupAdmin(groupId) rules succeed
+        // 1. Prepare admin member record
         val adminMember = GroupMember(
             userId = creatorUser.id,
             displayName = creatorUser.displayName.ifBlank { "Admin" },
@@ -80,32 +77,30 @@ class FamilyGroupRepositoryImpl @Inject constructor(
             phoneNumber = creatorUser.phoneNumber,
             joinedAt = System.currentTimeMillis()
         )
-        firestore.collection("groups")
-            .document(groupId)
-            .collection("members")
-            .document(creatorUser.id)
-            .set(adminMember)
-            .await()
 
-        // 3. Write invite code resolution doc for secure joining
-        try {
-            firestore.collection("inviteCodes").document(inviteCode).set(
-                mapOf(
-                    "code" to inviteCode,
-                    "groupId" to groupId,
-                    "groupName" to name,
-                    "createdBy" to creatorUser.id,
-                    "createdAt" to System.currentTimeMillis()
-                )
-            ).await()
-        } catch (e: Exception) {
-            Log.w("FamilyGroupRepo", "Failed to write inviteCodes document: ${e.message}")
-        }
-
-        // 4. Update creator's currentGroupId in users collection
-        firestore.collection("users").document(creatorUser.id)
-            .set(mapOf("currentGroupId" to groupId), SetOptions.merge())
-            .await()
+        // 2. Atomic batch creation in Firestore (group, member, inviteCode, and user profile)
+        val batch = firestore.batch()
+        batch.set(firestore.collection("groups").document(groupId), group)
+        batch.set(
+            firestore.collection("groups").document(groupId).collection("members").document(creatorUser.id),
+            adminMember
+        )
+        batch.set(
+            firestore.collection("inviteCodes").document(inviteCode),
+            mapOf(
+                "code" to inviteCode,
+                "groupId" to groupId,
+                "groupName" to name,
+                "createdBy" to creatorUser.id,
+                "createdAt" to System.currentTimeMillis()
+            )
+        )
+        batch.set(
+            firestore.collection("users").document(creatorUser.id),
+            mapOf("currentGroupId" to groupId),
+            SetOptions.merge()
+        )
+        batch.commit().await()
         userPreferencesRepository.setCurrentGroupId(groupId)
 
         // 5. Cache in Room
@@ -221,19 +216,22 @@ class FamilyGroupRepositoryImpl @Inject constructor(
     override suspend fun deleteGroup(groupId: String): Result<Unit> = runCatching {
         val currentUid = auth.currentUser?.uid ?: throw IllegalStateException("Not authenticated")
 
-        // 1. Verify admin role
-        val memberDoc = firestore.collection("groups")
-            .document(groupId)
-            .collection("members")
-            .document(currentUid)
-            .get()
-            .await()
-        val role = memberDoc.getString("role")?.uppercase()
-        require(role == "ADMIN") { "Only a family admin can delete the family" }
-
-        // 2. Fetch group doc for inviteCode
+        // 1. Fetch group doc for inviteCode and creator verification
         val groupDoc = firestore.collection("groups").document(groupId).get().await()
+        val isCreator = groupDoc.getString("createdBy") == currentUid
         val inviteCode = groupDoc.getString("inviteCode")
+
+        // 2. Verify admin role or creator
+        val memberDoc = runCatching {
+            firestore.collection("groups")
+                .document(groupId)
+                .collection("members")
+                .document(currentUid)
+                .get()
+                .await()
+        }.getOrNull()
+        val role = memberDoc?.getString("role")?.uppercase()
+        require(role == "ADMIN" || isCreator) { "Only a family admin can delete the family" }
 
         // 3. Fetch all members and subcollections
         val memberDocs = firestore.collection("groups").document(groupId).collection("members").get().await()
@@ -251,6 +249,12 @@ class FamilyGroupRepositoryImpl @Inject constructor(
 
         for (doc in memberDocs.documents) {
             batch.delete(doc.reference)
+            // Reset currentGroupId for all members in Firestore
+            batch.set(
+                firestore.collection("users").document(doc.id),
+                mapOf("currentGroupId" to null),
+                SetOptions.merge()
+            )
         }
         for (doc in medicineDocs.documents) {
             batch.delete(doc.reference)

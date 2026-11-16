@@ -74,11 +74,12 @@ class AddEditMedicineViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             val user = authRepository.getCurrentUser()
-            val groupId = if (initialGroupId.isNotBlank()) initialGroupId else user?.currentGroupId.orEmpty()
+            val rawGroupId = if (initialGroupId.isNotBlank()) initialGroupId else user?.currentGroupId.orEmpty()
+            val groupId = rawGroupId.ifBlank { "default_group" }
             val userId = user?.id.orEmpty()
 
-            val members = if (groupId.isNotBlank()) {
-                familyGroupRepository.observeMembers(groupId).firstOrNull() ?: emptyList()
+            val members = if (rawGroupId.isNotBlank()) {
+                familyGroupRepository.observeMembers(rawGroupId).firstOrNull() ?: emptyList()
             } else emptyList()
 
             _uiState.update {
@@ -174,10 +175,7 @@ class AddEditMedicineViewModel @Inject constructor(
             _uiState.update { it.copy(errorMessage = "Please add at least one reminder time") }
             return
         }
-        if (state.groupId.isBlank()) {
-            _uiState.update { it.copy(errorMessage = "Please create or join a family circle before adding medicines") }
-            return
-        }
+        val effectiveGroupId = state.groupId.ifBlank { "default_group" }
 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
@@ -186,7 +184,7 @@ class AddEditMedicineViewModel @Inject constructor(
 
             val medicine = Medicine(
                 id = medicineId,
-                groupId = state.groupId,
+                groupId = effectiveGroupId,
                 assignedMemberId = state.assignedMemberId,
                 name = state.name.trim(),
                 dosage = state.dosage.trim(),

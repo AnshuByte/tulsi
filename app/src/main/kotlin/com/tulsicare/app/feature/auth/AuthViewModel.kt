@@ -47,6 +47,13 @@ class AuthViewModel @Inject constructor(
     fun toggleAuthMode() = _uiState.update { it.copy(isSignUp = !it.isSignUp, errorMessage = null) }
     fun setErrorMessage(message: String?) = _uiState.update { it.copy(errorMessage = message) }
 
+    fun updateDisplayName(name: String, onComplete: (Result<Unit>) -> Unit = {}) {
+        viewModelScope.launch {
+            val result = authRepository.updateDisplayName(name)
+            onComplete(result)
+        }
+    }
+
     fun resetForm() {
         _uiState.update {
             it.copy(

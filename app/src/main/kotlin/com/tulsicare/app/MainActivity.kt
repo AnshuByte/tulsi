@@ -142,6 +142,9 @@ fun TulsiNavigation() {
                     },
                     onNavigateToEditMedicine = { medicineId ->
                         navController.navigate("edit_medicine/$medicineId")
+                    },
+                    onNavigateToFamily = {
+                        navController.navigate("family")
                     }
                 )
             }
@@ -173,6 +176,7 @@ fun TulsiNavigation() {
                     preReminderLeadMinutes = homeState.preReminderLeadMinutes,
                     onToggleSimpleMode = homeViewModel::toggleSimpleMode,
                     onSetPreReminderLeadMinutes = homeViewModel::setPreReminderLeadMinutes,
+                    onUpdateDisplayName = authViewModel::updateDisplayName,
                     onNavigateToReliability = {
                         navController.navigate("reliability")
                     },

@@ -12,6 +12,7 @@ import com.tulsicare.app.core.model.User
 import com.tulsicare.app.core.preferences.UserPreferencesRepository
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.auth.UserProfileChangeRequest
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -362,6 +363,38 @@ class AuthRepositoryImpl @Inject constructor(
         firestore.collection("users").document(user.id)
             .set(user, SetOptions.merge())
             .await()
+    }
+
+    override suspend fun updateDisplayName(name: String): Result<Unit> = runCatching {
+        val cleanName = name.trim()
+        require(cleanName.isNotBlank()) { "Display name cannot be empty" }
+        val firebaseUser = auth.currentUser ?: throw IllegalStateException("Not authenticated")
+
+        // 1. Update FirebaseAuth profile
+        val profileUpdates = UserProfileChangeRequest.Builder()
+            .setDisplayName(cleanName)
+            .build()
+        firebaseUser.updateProfile(profileUpdates).await()
+
+        // 2. Update Firestore user doc
+        val current = localUser.value ?: getCurrentUser() ?: User(id = firebaseUser.uid)
+        val updatedUser = current.copy(displayName = cleanName)
+        firestore.collection("users").document(firebaseUser.uid)
+            .set(mapOf("displayName" to cleanName), SetOptions.merge())
+            .await()
+        localUser.value = updatedUser
+
+        // 3. Update group member doc in Firestore & Room if in a group
+        val groupId = updatedUser.currentGroupId
+        if (!groupId.isNullOrBlank()) {
+            runCatching {
+                firestore.collection("groups").document(groupId)
+                    .collection("members").document(firebaseUser.uid)
+                    .update("displayName", cleanName)
+                    .await()
+            }
+            database.familyGroupDao().updateMemberDisplayName(firebaseUser.uid, groupId, cleanName)
+        }
     }
 
     override suspend fun updateCurrentGroupId(groupId: String): Result<Unit> = runCatching {

@@ -24,7 +24,6 @@ service cloud.firestore {
 
     // Top-level invite code resolution (prevents enumeration of groups)
     match /inviteCodes/{code} {
-      // Readable by exact get only; list is denied to prevent enumerating groups
       allow get: if isAuthenticated();
       allow list: if false;
       allow create: if isAuthenticated();
@@ -41,7 +40,17 @@ service cloud.firestore {
         request.auth.uid == userId ||
         (resource.data.currentGroupId != null && isGroupMember(resource.data.currentGroupId))
       );
-      allow write: if isUser(userId);
+      allow create: if isUser(userId);
+      allow update: if isUser(userId) || (
+        isAuthenticated() &&
+        resource.data.currentGroupId != null &&
+        (isGroupAdmin(resource.data.currentGroupId) ||
+         (exists(/databases/$(database)/documents/groups/$(resource.data.currentGroupId)) &&
+          get(/databases/$(database)/documents/groups/$(resource.data.currentGroupId)).data.createdBy == request.auth.uid)) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentGroupId']) &&
+        request.resource.data.currentGroupId == null
+      );
+      allow delete: if isUser(userId);
 
       match /fcmTokens/{tokenId} {
         allow read, write: if isUser(userId);
@@ -50,21 +59,30 @@ service cloud.firestore {
 
     // Family groups
     match /groups/{groupId} {
-      allow read: if isGroupMember(groupId);
+      allow read: if isGroupMember(groupId) || (isAuthenticated() && resource.data.createdBy == request.auth.uid);
       allow create: if isAuthenticated();
-      allow update, delete: if isGroupAdmin(groupId);
+      allow update, delete: if isGroupAdmin(groupId) || (
+        isAuthenticated() && resource.data.createdBy == request.auth.uid
+      );
 
       match /members/{memberId} {
-        allow read: if isGroupMember(groupId);
+        allow read: if isGroupMember(groupId) || (
+          isAuthenticated() &&
+          exists(/databases/$(database)/documents/groups/$(groupId)) &&
+          get(/databases/$(database)/documents/groups/$(groupId)).data.createdBy == request.auth.uid
+        );
         
         // Privilege escalation protection:
-        // Admin can add members. Prospective member joining can ONLY set role to MEMBER,
-        // unless creating the initial group doc.
+        // Admin or group creator can add admin member; prospective member joining can ONLY set role to MEMBER
         allow create: if isAuthenticated() && (
           isGroupAdmin(groupId) ||
           (request.auth.uid == memberId && (
             request.resource.data.role in ['MEMBER', 'member'] ||
-            !exists(/databases/$(database)/documents/groups/$(groupId))
+            !exists(/databases/$(database)/documents/groups/$(groupId)) ||
+            (exists(/databases/$(database)/documents/groups/$(groupId)) &&
+             get(/databases/$(database)/documents/groups/$(groupId)).data.createdBy == request.auth.uid) ||
+            (existsAfter(/databases/$(database)/documents/groups/$(groupId)) &&
+             getAfter(/databases/$(database)/documents/groups/$(groupId)).data.createdBy == request.auth.uid)
           ))
         );
 
@@ -74,17 +92,31 @@ service cloud.firestore {
           request.resource.data.role == resource.data.role
         );
 
-        allow delete: if isGroupAdmin(groupId) || (request.auth.uid == memberId);
+        allow delete: if isGroupAdmin(groupId) || (request.auth.uid == memberId) || (
+          isAuthenticated() &&
+          exists(/databases/$(database)/documents/groups/$(groupId)) &&
+          get(/databases/$(database)/documents/groups/$(groupId)).data.createdBy == request.auth.uid
+        );
       }
 
       match /medicines/{medicineId} {
         allow read: if isGroupMember(groupId);
-        allow create, update, delete: if isGroupAdmin(groupId);
+        allow create, update: if isGroupAdmin(groupId);
+        allow delete: if isGroupAdmin(groupId) || (
+          isAuthenticated() &&
+          exists(/databases/$(database)/documents/groups/$(groupId)) &&
+          get(/databases/$(database)/documents/groups/$(groupId)).data.createdBy == request.auth.uid
+        );
       }
 
       match /schedules/{scheduleId} {
         allow read: if isGroupMember(groupId);
-        allow create, update, delete: if isGroupAdmin(groupId);
+        allow create, update: if isGroupAdmin(groupId);
+        allow delete: if isGroupAdmin(groupId) || (
+          isAuthenticated() &&
+          exists(/databases/$(database)/documents/groups/$(groupId)) &&
+          get(/databases/$(database)/documents/groups/$(groupId)).data.createdBy == request.auth.uid
+        );
       }
 
       match /doseEvents/{eventId} {
@@ -106,7 +138,11 @@ service cloud.firestore {
           )
         );
 
-        allow delete: if isGroupAdmin(groupId);
+        allow delete: if isGroupAdmin(groupId) || (
+          isAuthenticated() &&
+          exists(/databases/$(database)/documents/groups/$(groupId)) &&
+          get(/databases/$(database)/documents/groups/$(groupId)).data.createdBy == request.auth.uid
+        );
       }
     }
   }
