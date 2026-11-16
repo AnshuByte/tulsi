@@ -51,8 +51,8 @@ class MedicineRepositoryImpl @Inject constructor(
         // Cache in Room immediately for instant local UI display
         medicineDao.insertMedicine(toSave.toEntity())
 
-        // Confirm written to Firestore before returning
-        if (toSave.groupId.isNotBlank()) {
+        // Confirm written to Firestore before returning (only if real group)
+        if (toSave.groupId.isNotBlank() && toSave.groupId != "default_group" && toSave.groupId != "my_family") {
             firestore.collection("groups")
                 .document(toSave.groupId)
                 .collection("medicines")
@@ -68,7 +68,7 @@ class MedicineRepositoryImpl @Inject constructor(
         val updated = medicine.copy(updatedAt = System.currentTimeMillis())
         medicineDao.updateMedicine(updated.toEntity())
 
-        if (updated.groupId.isNotBlank()) {
+        if (updated.groupId.isNotBlank() && updated.groupId != "default_group" && updated.groupId != "my_family") {
             firestore.collection("groups")
                 .document(updated.groupId)
                 .collection("medicines")
@@ -82,7 +82,7 @@ class MedicineRepositoryImpl @Inject constructor(
         // Cancel all alarms, pre-reminders, snoozes via registry
         ExactAlarmScheduler.cancelAlarmsForMedicine(context, medicineId)
 
-        if (groupId.isNotBlank()) {
+        if (groupId.isNotBlank() && groupId != "default_group" && groupId != "my_family") {
             firestore.collection("groups")
                 .document(groupId)
                 .collection("medicines")
@@ -95,6 +95,11 @@ class MedicineRepositoryImpl @Inject constructor(
     }
 
     override fun syncMedicinesRealtime(groupId: String): Flow<List<Medicine>> = callbackFlow {
+        if (groupId.isBlank() || groupId == "default_group" || groupId == "my_family") {
+            trySend(emptyList())
+            awaitClose { }
+            return@callbackFlow
+        }
         val currentUid = auth.currentUser?.uid.orEmpty()
         val registration = firestore.collection("groups")
             .document(groupId)

@@ -143,9 +143,9 @@ class DoseEventRepositoryImpl @Inject constructor(
         // 1. Update Room DB immediately for offline responsiveness
         doseEventDao.insertDoseEvent(updated.toEntity())
 
-        // 2. Sync to Firestore (offline queue enabled)
-        runCatching {
-            if (updated.groupId.isNotBlank()) {
+        // 2. Sync to Firestore (only if real group)
+        if (updated.groupId.isNotBlank() && updated.groupId != "default_group" && updated.groupId != "my_family") {
+            runCatching {
                 firestore.collection("groups")
                     .document(updated.groupId)
                     .collection("doseEvents")
@@ -290,13 +290,15 @@ class DoseEventRepositoryImpl @Inject constructor(
                         createdAt = System.currentTimeMillis()
                     )
                     doseEventDao.insertDoseEvent(newEvent.toEntity())
-                    // Write to Firestore asynchronously
-                    runCatching {
-                        firestore.collection("groups")
-                            .document(groupId)
-                            .collection("doseEvents")
-                            .document(newEvent.id)
-                            .set(newEvent)
+                    // Write to Firestore asynchronously (only if real group)
+                    if (groupId.isNotBlank() && groupId != "default_group" && groupId != "my_family") {
+                        runCatching {
+                            firestore.collection("groups")
+                                .document(groupId)
+                                .collection("doseEvents")
+                                .document(newEvent.id)
+                                .set(newEvent)
+                        }
                     }
                     generatedEvents.add(newEvent)
                 }
@@ -310,6 +312,11 @@ class DoseEventRepositoryImpl @Inject constructor(
         startMillis: Long,
         endMillis: Long
     ): Flow<List<DoseEvent>> = callbackFlow {
+        if (groupId.isBlank() || groupId == "default_group" || groupId == "my_family") {
+            trySend(emptyList())
+            awaitClose { }
+            return@callbackFlow
+        }
         val currentUid = auth.currentUser?.uid.orEmpty()
         val registration = firestore.collection("groups")
             .document(groupId)

@@ -54,19 +54,21 @@ class ScheduleRepositoryImpl @Inject constructor(
         // Reschedule alarms immediately
         ExactAlarmScheduler.rescheduleAll(context)
 
-        // Sync to Firestore in background
-        runCatching {
-            firestore.collection("groups")
-                .document(toSave.groupId)
-                .collection("schedules")
-                .document(id)
-                .set(toSave)
-                .await()
-        }
+        // Sync to Firestore in background (only if real group)
+        if (toSave.groupId.isNotBlank() && toSave.groupId != "default_group" && toSave.groupId != "my_family") {
+            runCatching {
+                firestore.collection("groups")
+                    .document(toSave.groupId)
+                    .collection("schedules")
+                    .document(id)
+                    .set(toSave)
+                    .await()
+            }
 
-        // Notify family members via Cloudflare Worker push relay
-        runCatching {
-            pushRelayClient.relayScheduleSync(toSave.groupId)
+            // Notify family members via Cloudflare Worker push relay
+            runCatching {
+                pushRelayClient.relayScheduleSync(toSave.groupId)
+            }
         }
 
         id
@@ -77,35 +79,48 @@ class ScheduleRepositoryImpl @Inject constructor(
         ExactAlarmScheduler.cancelAlarm(context, schedule.id)
         ExactAlarmScheduler.rescheduleAll(context)
 
-        runCatching {
-            firestore.collection("groups")
-                .document(schedule.groupId)
-                .collection("schedules")
-                .document(schedule.id)
-                .set(schedule)
-                .await()
-        }
+        if (schedule.groupId.isNotBlank() && schedule.groupId != "default_group" && schedule.groupId != "my_family") {
+            runCatching {
+                firestore.collection("groups")
+                    .document(schedule.groupId)
+                    .collection("schedules")
+                    .document(schedule.id)
+                    .set(schedule)
+                    .await()
+            }
 
-        runCatching {
-            pushRelayClient.relayScheduleSync(schedule.groupId)
+            runCatching {
+                pushRelayClient.relayScheduleSync(schedule.groupId)
+            }
         }
     }
 
     override suspend fun deleteSchedule(groupId: String, scheduleId: String): Result<Unit> = runCatching {
-        firestore.collection("groups")
-            .document(groupId)
-            .collection("schedules")
-            .document(scheduleId)
-            .update("isActive", false)
-            .await()
+        if (groupId.isNotBlank() && groupId != "default_group" && groupId != "my_family") {
+            runCatching {
+                firestore.collection("groups")
+                    .document(groupId)
+                    .collection("schedules")
+                    .document(scheduleId)
+                    .update("isActive", false)
+                    .await()
+            }
+        }
 
         scheduleDao.deleteScheduleById(scheduleId)
         ExactAlarmScheduler.cancelAlarm(context, scheduleId)
         ExactAlarmScheduler.rescheduleAll(context)
-        pushRelayClient.relayScheduleSync(groupId)
+        if (groupId.isNotBlank() && groupId != "default_group" && groupId != "my_family") {
+            runCatching { pushRelayClient.relayScheduleSync(groupId) }
+        }
     }
 
     override fun syncSchedulesRealtime(groupId: String): Flow<List<Schedule>> = callbackFlow {
+        if (groupId.isBlank() || groupId == "default_group" || groupId == "my_family") {
+            trySend(emptyList())
+            awaitClose { }
+            return@callbackFlow
+        }
         val currentUid = auth.currentUser?.uid.orEmpty()
         val registration = firestore.collection("groups")
             .document(groupId)

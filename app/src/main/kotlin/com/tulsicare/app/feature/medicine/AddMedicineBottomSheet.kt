@@ -203,6 +203,46 @@ fun AddMedicineBottomSheet(
                     }
                 }
 
+                // Member Selector: "Who is this medicine for?"
+                if (uiState.availableMembers.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "Who is this medicine for?",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color(0xFF888888)
+                        )
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            uiState.availableMembers.forEach { member ->
+                                val isSelected = uiState.assignedMemberId == member.userId
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(if (isSelected) Color.White else Color(0xFF222222))
+                                        .border(
+                                            width = 1.dp,
+                                            color = if (isSelected) Color.White else Color(0xFF333333),
+                                            shape = RoundedCornerShape(10.dp)
+                                        )
+                                        .clickable { viewModel.onMemberSelected(member.userId) }
+                                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = member.displayName.ifBlank { "Member" },
+                                        color = if (isSelected) Color.Black else Color(0xFFCCCCCC),
+                                        fontSize = 13.sp,
+                                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // 2. Dosage + Form Dropdown Row
                 Row(
                     modifier = Modifier.fillMaxWidth(),

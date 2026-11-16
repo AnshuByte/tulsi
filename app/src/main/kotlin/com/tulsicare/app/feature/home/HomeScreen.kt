@@ -79,12 +79,14 @@ fun HomeScreen(
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val addMedViewModel: AddEditMedicineViewModel = hiltViewModel()
     var showAddMedicineSheet by remember { mutableStateOf(false) }
     var showFamilyPromptDialog by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
     fun openAddMedicineSheet() {
+        addMedViewModel.resetForm(initialGroupId = uiState.currentGroup?.id.orEmpty())
         showAddMedicineSheet = true
     }
 
@@ -100,15 +102,16 @@ fun HomeScreen(
     )
 
     if (showAddMedicineSheet) {
-        val addMedViewModel: AddEditMedicineViewModel = hiltViewModel()
         AddMedicineBottomSheet(
             viewModel = addMedViewModel,
             onDismiss = { showAddMedicineSheet = false },
             onSaveSuccess = { medicineName, nextDoseTime ->
                 showAddMedicineSheet = false
+                addMedViewModel.resetForm(initialGroupId = uiState.currentGroup?.id.orEmpty())
                 viewModel.loadData()
+                val doseMsg = if (nextDoseTime.isNotBlank() && nextDoseTime != "scheduled") "at $nextDoseTime" else "scheduled"
                 scope.launch {
-                    snackbarHostState.showSnackbar("$medicineName added. Next dose $nextDoseTime.")
+                    snackbarHostState.showSnackbar("$medicineName added. Next dose $doseMsg.")
                 }
                 if (uiState.members.isEmpty() || uiState.currentGroup == null) {
                     showFamilyPromptDialog = true

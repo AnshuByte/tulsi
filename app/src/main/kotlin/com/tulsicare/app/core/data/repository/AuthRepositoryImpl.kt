@@ -22,6 +22,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -44,34 +45,25 @@ class AuthRepositoryImpl @Inject constructor(
     private val localUser = MutableStateFlow<User?>(null)
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    override val currentUser: Flow<User?> = callbackFlow {
-        val listener = FirebaseAuth.AuthStateListener { firebaseAuth ->
+    init {
+        auth.addAuthStateListener { firebaseAuth ->
             val firebaseUser = firebaseAuth.currentUser
             if (firebaseUser == null) {
-                trySend(localUser.value)
+                localUser.value = null
             } else {
-                val basicUser = User(
+                val current = localUser.value
+                val name = firebaseUser.displayName.orEmpty().ifBlank { current?.displayName.orEmpty() }
+                localUser.value = (current ?: User(id = firebaseUser.uid)).copy(
                     id = firebaseUser.uid,
-                    displayName = firebaseUser.displayName.orEmpty(),
+                    displayName = name,
                     email = firebaseUser.email.orEmpty(),
                     phoneNumber = firebaseUser.phoneNumber.orEmpty()
                 )
-                trySend(basicUser)
             }
-        }
-        auth.addAuthStateListener(listener)
-        val job = CoroutineScope(Dispatchers.Default).launch {
-            localUser.collect { user ->
-                if (auth.currentUser == null) {
-                    trySend(user)
-                }
-            }
-        }
-        awaitClose {
-            auth.removeAuthStateListener(listener)
-            job.cancel()
         }
     }
+
+    override val currentUser: Flow<User?> = localUser.asStateFlow()
 
     override suspend fun getCurrentUser(): User? {
         val firebaseUser = auth.currentUser
@@ -80,7 +72,7 @@ class AuthRepositoryImpl @Inject constructor(
         }
         return try {
             val doc = firestore.collection("users").document(firebaseUser.uid).get().await()
-            if (doc.exists()) {
+            val user = if (doc.exists()) {
                 doc.toObject(User::class.java)?.copy(id = firebaseUser.uid)
             } else {
                 val newUser = User(
@@ -92,6 +84,10 @@ class AuthRepositoryImpl @Inject constructor(
                 firestore.collection("users").document(firebaseUser.uid).set(newUser).await()
                 newUser
             }
+            if (user != null) {
+                localUser.value = user
+            }
+            user
         } catch (e: Exception) {
             User(
                 id = firebaseUser.uid,
@@ -386,7 +382,7 @@ class AuthRepositoryImpl @Inject constructor(
 
         // 3. Update group member doc in Firestore & Room if in a group
         val groupId = updatedUser.currentGroupId
-        if (!groupId.isNullOrBlank()) {
+        if (!groupId.isNullOrBlank() && groupId != "default_group" && groupId != "my_family") {
             runCatching {
                 firestore.collection("groups").document(groupId)
                     .collection("members").document(firebaseUser.uid)

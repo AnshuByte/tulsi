@@ -70,6 +70,12 @@ class AddEditMedicineViewModel @Inject constructor(
         initData(medicineId, initialGroupId)
     }
 
+    fun resetForm(medicineId: String? = null, initialGroupId: String = "") {
+        existingScheduleId = null
+        _uiState.value = AddEditMedicineUiState()
+        initData(medicineId, initialGroupId)
+    }
+
     private fun initData(medicineId: String?, initialGroupId: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
