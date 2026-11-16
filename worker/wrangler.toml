@@ -1,0 +1,7 @@
+name = "tulsi-worker"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+
+# Cron trigger: Runs every 5 minutes to check for pending doses that exceeded the escalation window
+[triggers]
+crons = ["*/5 * * * *"]

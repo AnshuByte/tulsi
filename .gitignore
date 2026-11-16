@@ -1,0 +1,17 @@
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+app/build
+worker/node_modules
+worker/.wrangler
+.kotlin
+captures
+.externalNativeBuild
+.cxx
+local.properties
+*.keystore
+*service-account*.json
+
