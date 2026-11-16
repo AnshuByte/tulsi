@@ -1,11 +1,14 @@
 {
   "name": "tulsi-worker",
   "version": "1.0.0",
+  "type": "module",
   "description": "Cloudflare Worker push relay and cron escalation for Tulsi ($0 free tier)",
   "main": "src/index.ts",
   "scripts": {
+    "build": "tsc",
     "deploy": "wrangler deploy",
-    "dev": "wrangler dev"
+    "dev": "wrangler dev",
+    "test": "tsc && node --test test/worker.test.js"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20241112.0",

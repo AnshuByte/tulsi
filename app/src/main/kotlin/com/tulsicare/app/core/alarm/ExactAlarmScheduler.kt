@@ -1,4 +1,4 @@
-﻿package com.tulsicare.app.core.alarm
+package com.tulsicare.app.core.alarm
 
 import android.app.AlarmManager
 import android.app.PendingIntent

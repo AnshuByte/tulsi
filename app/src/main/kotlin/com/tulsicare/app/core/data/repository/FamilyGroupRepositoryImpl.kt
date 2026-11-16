@@ -1,4 +1,4 @@
-﻿package com.tulsicare.app.core.data.repository
+package com.tulsicare.app.core.data.repository
 
 import com.tulsicare.app.core.database.dao.DoseEventDao
 import com.tulsicare.app.core.database.dao.FamilyGroupDao

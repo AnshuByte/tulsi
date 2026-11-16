@@ -67,7 +67,13 @@ class HistoryViewModel @Inject constructor(
             }
             val startMillis = cal.timeInMillis
 
-            val events = doseEventRepository.getEventsForDateRange(groupId, startMillis, now)
+            val allGroupEvents = doseEventRepository.getEventsForDateRange(groupId, startMillis, now)
+            // Ensure patient data isolation: report contains only the active member's doses
+            val events = if (user != null && user.id.isNotBlank()) {
+                allGroupEvents.filter { it.assignedMemberId == user.id || it.assignedMemberId.isBlank() }
+            } else {
+                allGroupEvents
+            }
 
             val total = events.size
             val taken = events.count { it.status == DoseStatus.TAKEN }

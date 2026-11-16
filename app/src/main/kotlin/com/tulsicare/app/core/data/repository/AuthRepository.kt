@@ -1,4 +1,4 @@
-﻿package com.tulsicare.app.core.data.repository
+package com.tulsicare.app.core.data.repository
 
 import com.tulsicare.app.core.model.User
 import kotlinx.coroutines.flow.Flow

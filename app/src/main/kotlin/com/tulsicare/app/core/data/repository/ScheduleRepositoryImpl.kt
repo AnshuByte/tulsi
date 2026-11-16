@@ -1,4 +1,4 @@
-﻿package com.tulsicare.app.core.data.repository
+package com.tulsicare.app.core.data.repository
 
 import android.content.Context
 import com.tulsicare.app.core.alarm.ExactAlarmScheduler

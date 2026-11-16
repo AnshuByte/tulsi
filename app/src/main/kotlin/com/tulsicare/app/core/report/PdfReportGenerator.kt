@@ -133,8 +133,20 @@ object PdfReportGenerator {
             paint.color = Color.rgb(50, 60, 70)
             paint.textSize = 9.5f
             canvas.drawText(timeFormat.format(Date(event.scheduledAt)), 42f, currentY, paint)
-            canvas.drawText(event.medicineName, 180f, currentY, paint)
-            canvas.drawText(event.dosage.ifBlank { "1 dose" }, 350f, currentY, paint)
+
+            val displayMedName = if (event.medicineName.length > 25) {
+                event.medicineName.take(22) + "..."
+            } else {
+                event.medicineName
+            }
+            canvas.drawText(displayMedName, 180f, currentY, paint)
+
+            val displayDosage = if (event.dosage.length > 18) {
+                event.dosage.take(15) + "..."
+            } else {
+                event.dosage.ifBlank { "1 dose" }
+            }
+            canvas.drawText(displayDosage, 350f, currentY, paint)
 
             when (event.status) {
                 DoseStatus.TAKEN -> {

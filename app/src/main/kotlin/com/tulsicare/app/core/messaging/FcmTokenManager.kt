@@ -1,4 +1,4 @@
-﻿package com.tulsicare.app.core.messaging
+package com.tulsicare.app.core.messaging
 
 import android.content.Context
 import android.os.Build
