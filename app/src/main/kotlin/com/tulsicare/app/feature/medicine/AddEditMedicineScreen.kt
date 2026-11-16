@@ -1,4 +1,4 @@
-﻿package com.tulsicare.app.feature.medicine
+package com.tulsicare.app.feature.medicine
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -64,8 +64,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.tulsicare.app.core.designsystem.PrimaryTeal
-import com.tulsicare.app.core.designsystem.StatusMissedCoral
+import com.tulsicare.app.core.designsystem.TulsiTheme
 import com.tulsicare.app.core.model.MedicineForm
 import com.tulsicare.app.core.model.ScheduleType
 import java.util.Locale
@@ -118,7 +117,7 @@ fun AddEditMedicineScreen(
                     .padding(innerPadding),
                 contentAlignment = Alignment.Center
             ) {
-                CircularProgressIndicator(color = PrimaryTeal)
+                CircularProgressIndicator(color = TulsiTheme.colors.textPrimary)
             }
         } else {
             Column(
@@ -151,7 +150,7 @@ fun AddEditMedicineScreen(
                             label = { Text("Medicine Name") },
                             placeholder = { Text("e.g. Metformin, Amlodipine") },
                             leadingIcon = {
-                                Icon(Icons.Default.Medication, contentDescription = null, tint = PrimaryTeal)
+                                Icon(Icons.Default.Medication, contentDescription = null, tint = TulsiTheme.colors.textPrimary)
                             },
                             isError = uiState.errorMessage != null && uiState.name.isBlank(),
                             singleLine = true,
@@ -276,7 +275,7 @@ fun AddEditMedicineScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Icon(Icons.Default.NotificationsActive, contentDescription = null, tint = PrimaryTeal)
+                            Icon(Icons.Default.NotificationsActive, contentDescription = null, tint = TulsiTheme.colors.textPrimary)
                             Text(
                                 text = "Family Alert Window",
                                 style = MaterialTheme.typography.titleMedium,
@@ -312,14 +311,15 @@ fun AddEditMedicineScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(56.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryTeal),
-                    shape = RoundedCornerShape(16.dp)
+                    colors = ButtonDefaults.buttonColors(containerColor = TulsiTheme.colors.buttonPrimary, contentColor = TulsiTheme.colors.buttonText),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
                     Icon(Icons.Default.Check, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = if (uiState.medicineId == null) "Save Medicine & Set Alarms" else "Save Changes",
-                        style = MaterialTheme.typography.titleMedium
+                        style = MaterialTheme.typography.titleMedium,
+                        color = TulsiTheme.colors.buttonText
                     )
                 }
 
@@ -330,14 +330,15 @@ fun AddEditMedicineScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(56.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = StatusMissedCoral),
-                        shape = RoundedCornerShape(16.dp)
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = TulsiTheme.colors.statusMissed),
+                        shape = RoundedCornerShape(12.dp)
                     ) {
                         Icon(Icons.Default.Delete, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "Delete Medicine",
-                            style = MaterialTheme.typography.titleMedium
+                            style = MaterialTheme.typography.titleMedium,
+                            color = TulsiTheme.colors.statusMissed
                         )
                     }
                 }
@@ -377,8 +378,8 @@ fun MedicineFormSelector(
                 onClick = { onFormSelected(form) },
                 label = { Text(form.name.lowercase().replaceFirstChar { it.uppercase() }) },
                 colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = PrimaryTeal,
-                    selectedLabelColor = Color.White
+                    selectedContainerColor = TulsiTheme.colors.buttonPrimary,
+                    selectedLabelColor = TulsiTheme.colors.buttonText
                 )
             )
         }
@@ -410,8 +411,8 @@ fun MemberSelector(
                     )
                 },
                 colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = PrimaryTeal,
-                    selectedLabelColor = Color.White
+                    selectedContainerColor = TulsiTheme.colors.buttonPrimary,
+                    selectedLabelColor = TulsiTheme.colors.buttonText
                 )
             )
         }
@@ -441,8 +442,8 @@ fun ScheduleTypeSelector(
                 onClick = { onTypeSelected(type) },
                 label = { Text(label) },
                 colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = PrimaryTeal,
-                    selectedLabelColor = Color.White
+                    selectedContainerColor = TulsiTheme.colors.buttonPrimary,
+                    selectedLabelColor = TulsiTheme.colors.buttonText
                 )
             )
         }
@@ -474,13 +475,13 @@ fun DaysOfWeekSelector(
                 modifier = Modifier
                     .size(42.dp)
                     .clip(CircleShape)
-                    .background(if (isSelected) PrimaryTeal else MaterialTheme.colorScheme.surfaceVariant)
+                    .background(if (isSelected) TulsiTheme.colors.buttonPrimary else MaterialTheme.colorScheme.surfaceVariant)
                     .clickable { onToggleDay(day) },
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = label,
-                    color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (isSelected) TulsiTheme.colors.buttonText else MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.labelLarge
                 )
             }
@@ -513,7 +514,7 @@ fun ReminderTimesList(
                         imageVector = Icons.Default.AccessTime,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp),
-                        tint = PrimaryTeal
+                        tint = TulsiTheme.colors.textPrimary
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
@@ -538,7 +539,7 @@ fun ReminderTimesList(
         // Add Time button chip
         Surface(
             shape = RoundedCornerShape(12.dp),
-            color = PrimaryTeal.copy(alpha = 0.12f),
+            color = TulsiTheme.colors.surface,
             modifier = Modifier
                 .height(44.dp)
                 .clip(RoundedCornerShape(12.dp))
@@ -552,12 +553,12 @@ fun ReminderTimesList(
                     imageVector = Icons.Default.Add,
                     contentDescription = null,
                     modifier = Modifier.size(18.dp),
-                    tint = PrimaryTeal
+                    tint = TulsiTheme.colors.textPrimary
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     text = "Add Time",
-                    color = PrimaryTeal,
+                    color = TulsiTheme.colors.textPrimary,
                     style = MaterialTheme.typography.labelLarge
                 )
             }
@@ -582,13 +583,13 @@ fun EscalationWindowSelector(
                     .weight(1f)
                     .height(46.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(if (isSelected) PrimaryTeal else MaterialTheme.colorScheme.surfaceVariant)
+                    .background(if (isSelected) TulsiTheme.colors.buttonPrimary else MaterialTheme.colorScheme.surfaceVariant)
                     .clickable { onMinutesSelected(minutes) },
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = "${minutes}m",
-                    color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (isSelected) TulsiTheme.colors.buttonText else MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.titleSmall
                 )
             }
@@ -604,9 +605,9 @@ fun TimePickerModal(
 ) {
     val timePickerState = rememberTimePickerState(is24Hour = false)
 
-    Dialog(onDismissRequest = onDismiss) {
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Card(
-            shape = RoundedCornerShape(24.dp),
+            shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             modifier = Modifier.padding(16.dp)
         ) {
@@ -633,7 +634,7 @@ fun TimePickerModal(
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
                         onClick = { onConfirm(timePickerState.hour, timePickerState.minute) },
-                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryTeal)
+                        colors = ButtonDefaults.buttonColors(containerColor = TulsiTheme.colors.buttonPrimary, contentColor = TulsiTheme.colors.buttonText)
                     ) {
                         Text("Confirm")
                     }

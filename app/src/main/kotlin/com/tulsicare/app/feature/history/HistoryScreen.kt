@@ -1,9 +1,12 @@
 package com.tulsicare.app.feature.history
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,333 +15,344 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AccessTime
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.PictureAsPdf
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.tulsicare.app.core.designsystem.DeepNavy
-import com.tulsicare.app.core.designsystem.PrimaryTeal
-import com.tulsicare.app.core.designsystem.StatusMissedCoral
-import com.tulsicare.app.core.designsystem.StatusSnoozeAmber
-import com.tulsicare.app.core.designsystem.StatusTakenGreen
+import com.tulsicare.app.core.designsystem.TulsiBorderWidth
+import com.tulsicare.app.core.designsystem.TulsiCornerRadius
+import com.tulsicare.app.core.designsystem.TulsiScreenPadding
+import com.tulsicare.app.core.designsystem.TulsiTheme
+import com.tulsicare.app.core.designsystem.component.TulsiEmptyState
+import com.tulsicare.app.core.designsystem.component.TulsiListRow
+import com.tulsicare.app.core.designsystem.component.TulsiOutlinedButton
+import com.tulsicare.app.core.designsystem.component.TulsiSectionHeader
+import com.tulsicare.app.core.designsystem.component.TulsiStatusDot
 import com.tulsicare.app.core.model.DoseEvent
 import com.tulsicare.app.core.model.DoseStatus
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HistoryScreen(
     viewModel: HistoryViewModel,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit = {},
+    modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
+    HistoryScreenContent(
+        uiState = uiState,
+        onRangeSelected = viewModel::loadHistory,
+        onExportPdf = { viewModel.exportPdf(context) },
+        modifier = modifier
+    )
+}
+
+@Composable
+fun HistoryScreenContent(
+    uiState: HistoryUiState,
+    onRangeSelected: (Int) -> Unit,
+    onExportPdf: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = TulsiTheme.colors
+
+    // Group events by date (e.g. "Monday, Nov 16")
+    val groupedEvents = groupEventsByDate(uiState.events)
+
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = "History & Reports",
-                        style = MaterialTheme.typography.titleLarge
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    titleContentColor = MaterialTheme.colorScheme.secondary
-                )
-            )
-        },
-        containerColor = MaterialTheme.colorScheme.background
+        modifier = modifier.fillMaxSize(),
+        containerColor = colors.background
     ) { innerPadding ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+                .padding(innerPadding),
+            contentPadding = PaddingValues(bottom = 88.dp)
         ) {
-            // Range Filter (7 Days vs 30 Days)
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                FilterChip(
-                    selected = uiState.rangeDays == 7,
-                    onClick = { viewModel.loadHistory(7) },
-                    label = { Text("Last 7 Days") },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = PrimaryTeal,
-                        selectedLabelColor = Color.White
-                    )
-                )
-                FilterChip(
-                    selected = uiState.rangeDays == 30,
-                    onClick = { viewModel.loadHistory(30) },
-                    label = { Text("Last 30 Days") },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = PrimaryTeal,
-                        selectedLabelColor = Color.White
-                    )
-                )
-            }
-
-            // Summary Card (Adherence & Streak)
-            Card(
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                modifier = Modifier.fillMaxWidth()
-            ) {
+            // Screen Title
+            item(key = "title_section") {
                 Column(
-                    modifier = Modifier.padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = TulsiScreenPadding, vertical = 20.dp)
                 ) {
+                    Text(
+                        text = "History",
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = colors.textPrimary,
+                        letterSpacing = (-0.5).sp
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Segmented control: 7 days | 30 days
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(TulsiBorderWidth, colors.border, RoundedCornerShape(TulsiCornerRadius))
+                            .background(colors.surface, RoundedCornerShape(TulsiCornerRadius))
+                            .padding(4.dp)
                     ) {
-                        Column {
-                            Text(
-                                text = "Adherence Rate",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                text = "${uiState.adherencePercent}%",
-                                style = MaterialTheme.typography.displayMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = if (uiState.adherencePercent >= 80) StatusTakenGreen else StatusSnoozeAmber
-                            )
-                        }
-
-                        // Streak Badge
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = StatusSnoozeAmber.copy(alpha = 0.15f)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.LocalFireDepartment,
-                                    contentDescription = null,
-                                    tint = StatusSnoozeAmber,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Text(
-                                    text = "${uiState.streakDays} Day Streak",
-                                    color = DeepNavy,
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-                    }
-
-                    // Stat Breakdown row
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        StatItem(label = "Total Doses", count = uiState.totalDoses, color = DeepNavy)
-                        StatItem(label = "Taken", count = uiState.takenDoses, color = StatusTakenGreen)
-                        StatItem(label = "Skipped", count = uiState.skippedDoses, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        StatItem(label = "Missed", count = uiState.missedDoses, color = StatusMissedCoral)
-                    }
-                }
-            }
-
-            // PDF Export Button
-            Button(
-                onClick = { viewModel.exportPdf(context) },
-                enabled = !uiState.isExportingPdf,
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryTeal),
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(54.dp)
-            ) {
-                if (uiState.isExportingPdf) {
-                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Generating PDF...")
-                } else {
-                    Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(20.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Export Doctor Report (PDF)", style = MaterialTheme.typography.titleSmall)
-                }
-            }
-
-            // Dose Activity Log
-            Text(
-                text = "Activity Log",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.secondary
-            )
-
-            if (uiState.events.isEmpty()) {
-                Card(
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Box(modifier = Modifier.padding(24.dp), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = "No dose activity recorded in this period.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        SegmentedOption(
+                            text = "7 days",
+                            isSelected = uiState.rangeDays == 7,
+                            onClick = { onRangeSelected(7) },
+                            modifier = Modifier.weight(1f)
+                        )
+                        SegmentedOption(
+                            text = "30 days",
+                            isSelected = uiState.rangeDays == 30,
+                            onClick = { onRangeSelected(30) },
+                            modifier = Modifier.weight(1f)
                         )
                     }
                 }
-            } else {
-                uiState.events.forEach { event ->
-                    HistoryItemCard(event = event)
-                }
             }
 
-            // Disclaimer Banner
-            Card(
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
+            // Three numbers in a row: Adherence, Streak, Missed
+            item(key = "stats_row") {
                 Row(
-                    modifier = Modifier.padding(14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = TulsiScreenPadding, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Info,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp)
+                    StatNumberBox(
+                        value = "${uiState.adherencePercent}%",
+                        label = "Adherence",
+                        modifier = Modifier.weight(1f)
                     )
-                    Text(
-                        text = "Medical Disclaimer: Tulsi is an adherence tracker and does not provide medical advice. Consult your doctor regarding medication changes.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    StatNumberBox(
+                        value = "${uiState.streakDays}d",
+                        label = "Streak",
+                        modifier = Modifier.weight(1f)
+                    )
+                    StatNumberBox(
+                        value = "${uiState.missedDoses}",
+                        label = "Missed",
+                        modifier = Modifier.weight(1f)
                     )
                 }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Export PDF Button
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = TulsiScreenPadding)
+                ) {
+                    TulsiOutlinedButton(
+                        text = "Export PDF report",
+                        onClick = onExportPdf,
+                        isLoading = uiState.isExportingPdf,
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.PictureAsPdf,
+                                contentDescription = null,
+                                tint = colors.textPrimary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                HorizontalDivider(
+                    thickness = TulsiBorderWidth,
+                    color = colors.border,
+                    modifier = Modifier.padding(horizontal = TulsiScreenPadding)
+                )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            // Events List grouped by Day
+            if (groupedEvents.isEmpty()) {
+                item(key = "empty_history") {
+                    Spacer(modifier = Modifier.height(48.dp))
+                    TulsiEmptyState(
+                        title = "No history recorded",
+                        message = "Dose actions from the last ${uiState.rangeDays} days will appear here."
+                    )
+                }
+            } else {
+                groupedEvents.forEach { (dateHeader, events) ->
+                    item(key = "header_$dateHeader") {
+                        TulsiSectionHeader(title = dateHeader)
+                    }
+
+                    items(events, key = { it.id }) { event ->
+                        val timeStr = formatTime(event.scheduledAt)
+                        TulsiListRow(
+                            title = event.medicineName,
+                            subtitle = "${event.dosage} · $timeStr",
+                            leadingContent = {
+                                TulsiStatusDot(
+                                    status = event.status,
+                                    showLabel = false,
+                                    dotSize = 10.dp
+                                )
+                            },
+                            trailingContent = {
+                                TulsiStatusDot(
+                                    status = event.status,
+                                    showLabel = true
+                                )
+                            },
+                            showDivider = true
+                        )
+                    }
+                }
+            }
         }
     }
 }
 
 @Composable
-fun StatItem(label: String, count: Int, color: Color) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+private fun SegmentedOption(
+    text: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = TulsiTheme.colors
+
+    Box(
+        modifier = modifier
+            .clickable(onClick = onClick)
+            .background(
+                color = if (isSelected) colors.buttonPrimary else Color.Transparent,
+                shape = RoundedCornerShape(TulsiCornerRadius - 2.dp)
+            )
+            .padding(vertical = 10.dp),
+        contentAlignment = Alignment.Center
+    ) {
         Text(
-            text = count.toString(),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = color
+            text = text,
+            fontSize = 14.sp,
+            fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal,
+            color = if (isSelected) colors.buttonText else colors.textPrimary
         )
+    }
+}
+
+@Composable
+private fun StatNumberBox(
+    value: String,
+    label: String,
+    modifier: Modifier = Modifier
+) {
+    val colors = TulsiTheme.colors
+
+    Column(
+        modifier = modifier.padding(horizontal = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = value,
+            fontSize = 28.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = colors.textPrimary,
+            letterSpacing = (-0.5).sp
+        )
+        Spacer(modifier = Modifier.height(2.dp))
         Text(
             text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Normal,
+            color = colors.textSecondary
         )
     }
 }
 
-@Composable
-fun HistoryItemCard(event: DoseEvent) {
-    val timeFormat = SimpleDateFormat("EEE, dd MMM • hh:mm a", Locale.getDefault())
-    Card(
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column {
-                Text(
-                    text = event.medicineName,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.secondary
-                )
-                Text(
-                    text = timeFormat.format(Date(event.scheduledAt)),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = when (event.status) {
-                    DoseStatus.TAKEN -> StatusTakenGreen.copy(alpha = 0.15f)
-                    DoseStatus.SKIPPED -> MaterialTheme.colorScheme.surfaceVariant
-                    DoseStatus.SNOOZED -> StatusSnoozeAmber.copy(alpha = 0.15f)
-                    else -> StatusMissedCoral.copy(alpha = 0.15f)
-                }
-            ) {
-                Text(
-                    text = event.status.name,
-                    color = when (event.status) {
-                        DoseStatus.TAKEN -> StatusTakenGreen
-                        DoseStatus.SKIPPED -> MaterialTheme.colorScheme.onSurfaceVariant
-                        DoseStatus.SNOOZED -> StatusSnoozeAmber
-                        else -> StatusMissedCoral
-                    },
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                )
-            }
-        }
+private fun groupEventsByDate(events: List<DoseEvent>): Map<String, List<DoseEvent>> {
+    val sdf = SimpleDateFormat("EEEE, MMM d", Locale.getDefault())
+    val result = linkedMapOf<String, MutableList<DoseEvent>>()
+    events.sortedByDescending { it.scheduledAt }.forEach { event ->
+        val dateStr = sdf.format(Date(event.scheduledAt))
+        result.getOrPut(dateStr) { mutableListOf() }.add(event)
     }
+    return result
+}
+
+private fun formatTime(epochMillis: Long): String {
+    val sdf = SimpleDateFormat("h:mm a", Locale.getDefault())
+    return sdf.format(Date(epochMillis))
+}
+
+// -----------------------------------------------------------------------------
+// Previews: Light, Dark, 1.5x Font Scale
+// -----------------------------------------------------------------------------
+
+@Preview(name = "History - Light", showBackground = true)
+@Composable
+fun HistoryScreenPreviewLight() {
+    TulsiTheme(darkTheme = false) {
+        HistoryScreenContent(
+            uiState = getSampleHistoryUiState(),
+            onRangeSelected = {},
+            onExportPdf = {}
+        )
+    }
+}
+
+@Preview(name = "History - Dark", showBackground = true)
+@Composable
+fun HistoryScreenPreviewDark() {
+    TulsiTheme(darkTheme = true) {
+        HistoryScreenContent(
+            uiState = getSampleHistoryUiState(),
+            onRangeSelected = {},
+            onExportPdf = {}
+        )
+    }
+}
+
+@Preview(name = "History - 1.5x Font Scale", fontScale = 1.5f, showBackground = true)
+@Composable
+fun HistoryScreenPreviewLargeFont() {
+    TulsiTheme(darkTheme = false) {
+        HistoryScreenContent(
+            uiState = getSampleHistoryUiState(),
+            onRangeSelected = {},
+            onExportPdf = {}
+        )
+    }
+}
+
+private fun getSampleHistoryUiState(): HistoryUiState {
+    val now = System.currentTimeMillis()
+    return HistoryUiState(
+        rangeDays = 7,
+        adherencePercent = 94,
+        streakDays = 6,
+        missedDoses = 1,
+        events = listOf(
+            DoseEvent(id = "1", medicineName = "Metformin", dosage = "500mg", scheduledAt = now, status = DoseStatus.TAKEN),
+            DoseEvent(id = "2", medicineName = "Aspirin", dosage = "75mg", scheduledAt = now - 36000000L, status = DoseStatus.MISSED)
+        )
+    )
 }

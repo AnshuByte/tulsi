@@ -24,8 +24,14 @@ service cloud.firestore {
 
     // Top-level invite code resolution (prevents enumeration of groups)
     match /inviteCodes/{code} {
-      allow read: if isAuthenticated();
-      allow create, update, delete: if isAuthenticated() && isGroupAdmin(request.resource.data.groupId);
+      // Readable by exact get only; list is denied to prevent enumerating groups
+      allow get: if isAuthenticated();
+      allow list: if false;
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() && (
+        isGroupAdmin(resource.data.groupId) ||
+        resource.data.createdBy == request.auth.uid
+      );
     }
 
     // User profiles & FCM tokens

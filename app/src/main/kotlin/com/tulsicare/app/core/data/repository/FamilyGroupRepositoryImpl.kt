@@ -78,7 +78,13 @@ class FamilyGroupRepositoryImpl @Inject constructor(
         // 3. Write invite code resolution doc for secure joining
         runCatching {
             firestore.collection("inviteCodes").document(inviteCode).set(
-                mapOf("code" to inviteCode, "groupId" to groupId)
+                mapOf(
+                    "code" to inviteCode,
+                    "groupId" to groupId,
+                    "groupName" to name,
+                    "createdBy" to creatorUser.id,
+                    "createdAt" to System.currentTimeMillis()
+                )
             ).await()
         }
 
@@ -101,29 +107,30 @@ class FamilyGroupRepositoryImpl @Inject constructor(
 
     override suspend fun joinGroupByCode(inviteCode: String, user: User): Result<FamilyGroup> = runCatching {
         val cleanCode = inviteCode.trim().uppercase()
-        require(cleanCode.isNotBlank()) { "Invite code cannot be empty" }
-        require(cleanCode.length == 6) { "Invite code must be exactly 6 characters" }
-        require(cleanCode.all { it.isLetterOrDigit() }) { "Invite code contains invalid characters" }
+        require(cleanCode.isNotBlank()) { "Please enter an invite code" }
+        require(cleanCode.length == 6) { "Invite code must be 6 characters" }
+        require(cleanCode.all { it.isLetterOrDigit() }) { "Invite code must contain letters and numbers only" }
 
-        // First try secure resolution via top-level inviteCodes collection
-        val inviteDoc = firestore.collection("inviteCodes").document(cleanCode).get().await()
-        val targetGroupId = if (inviteDoc.exists()) {
-            inviteDoc.getString("groupId") ?: throw IllegalArgumentException("Invalid invite code format")
-        } else {
-            // Fallback for legacy groups created before inviteCodes mapping
-            val querySnapshot = firestore.collection("groups")
-                .whereEqualTo("inviteCode", cleanCode)
-                .limit(1)
-                .get()
-                .await()
-
-            if (querySnapshot.isEmpty) {
-                throw IllegalArgumentException("Invalid invite code. Group not found.")
-            }
-            querySnapshot.documents.first().id
+        // 1. Single document lookup via /inviteCodes/{code}
+        val inviteDoc = try {
+            firestore.collection("inviteCodes").document(cleanCode).get().await()
+        } catch (e: Exception) {
+            throw IllegalArgumentException("Unable to verify invite code. Please check your internet connection.")
         }
 
-        // Add user as MEMBER
+        if (!inviteDoc.exists()) {
+            throw IllegalArgumentException("Invite code not found. Please verify the code with your family admin.")
+        }
+
+        val expiresAt = inviteDoc.getLong("expiresAt")
+        if (expiresAt != null && expiresAt > 0 && expiresAt < System.currentTimeMillis()) {
+            throw IllegalArgumentException("This invite code has expired. Please ask your family admin for a new one.")
+        }
+
+        val targetGroupId = inviteDoc.getString("groupId")
+            ?: throw IllegalArgumentException("Invalid invite code configuration.")
+
+        // 2. Add user as member with role MEMBER
         val member = GroupMember(
             userId = user.id,
             displayName = user.displayName.ifBlank { "Member" },
@@ -132,27 +139,33 @@ class FamilyGroupRepositoryImpl @Inject constructor(
             phoneNumber = user.phoneNumber,
             joinedAt = System.currentTimeMillis()
         )
-        firestore.collection("groups")
-            .document(targetGroupId)
-            .collection("members")
-            .document(user.id)
-            .set(member)
-            .await()
 
+        try {
+            firestore.collection("groups")
+                .document(targetGroupId)
+                .collection("members")
+                .document(user.id)
+                .set(member)
+                .await()
+        } catch (e: Exception) {
+            throw IllegalStateException("Unable to join family group. Please check your permissions.")
+        }
+
+        // 3. Now that membership is recorded, retrieve group details
         val groupDoc = firestore.collection("groups").document(targetGroupId).get().await()
         val group = groupDoc.toObject(FamilyGroup::class.java)?.copy(id = targetGroupId)
-            ?: throw IllegalStateException("Failed to parse family group")
+            ?: throw IllegalStateException("Family group details could not be loaded.")
 
-        // Update user's currentGroupId
+        // 4. Update user's currentGroupId
         firestore.collection("users").document(user.id)
             .set(mapOf("currentGroupId" to group.id), SetOptions.merge())
             .await()
 
-        // Cache in Room
+        // 5. Cache in Room DB
         familyGroupDao.insertGroup(group.toEntity())
         familyGroupDao.insertMember(member.toEntity(group.id))
 
-        // Migrate pre-group local medicines, schedules, and dose events
+        // 6. Migrate pre-group local medicines, schedules, and dose events
         medicineDao.reassignGroup(listOf("default_group", "my_family"), group.id)
         scheduleDao.reassignGroup(listOf("default_group", "my_family"), group.id)
         doseEventDao.reassignGroup(listOf("default_group", "my_family"), group.id)

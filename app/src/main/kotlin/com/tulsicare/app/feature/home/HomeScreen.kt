@@ -1,18 +1,13 @@
 package com.tulsicare.app.feature.home
 
-import com.tulsicare.app.BuildConfig
-
-import androidx.compose.foundation.Image
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.material3.Switch
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.unit.sp
-import com.tulsicare.app.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,658 +17,381 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.BatteryAlert
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.Group
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Medication
-import androidx.compose.material.icons.filled.NotificationsActive
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.tulsicare.app.core.designsystem.DeepNavy
-import com.tulsicare.app.core.designsystem.PrimaryTeal
-import com.tulsicare.app.core.designsystem.StatusMissedCoral
-import com.tulsicare.app.core.designsystem.StatusSnoozeAmber
-import com.tulsicare.app.core.designsystem.StatusTakenGreen
+import com.tulsicare.app.core.designsystem.TulsiBorderWidth
+import com.tulsicare.app.core.designsystem.TulsiCornerRadius
+import com.tulsicare.app.core.designsystem.TulsiScreenPadding
+import com.tulsicare.app.core.designsystem.TulsiTheme
+import com.tulsicare.app.core.designsystem.component.TulsiButton
+import com.tulsicare.app.core.designsystem.component.TulsiEmptyState
+import com.tulsicare.app.core.designsystem.component.TulsiListRow
+import com.tulsicare.app.core.designsystem.component.TulsiSectionHeader
+import com.tulsicare.app.core.designsystem.component.TulsiStatusDot
+import com.tulsicare.app.core.designsystem.component.TulsiTextButton
 import com.tulsicare.app.core.model.DoseEvent
 import com.tulsicare.app.core.model.DoseStatus
-import com.tulsicare.app.core.model.Medicine
+import com.tulsicare.app.core.model.FamilyGroup
+import com.tulsicare.app.core.model.GroupMember
+import com.tulsicare.app.core.model.MemberRole
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel,
     onNavigateToAddMedicine: () -> Unit,
     onNavigateToEditMedicine: (medicineId: String) -> Unit,
-    onNavigateToBatterySettings: () -> Unit,
-    onNavigateToFamily: () -> Unit,
-    onNavigateToHistory: () -> Unit,
-    onSignOut: () -> Unit = {}
+    modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val context = LocalContext.current
-    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
 
-    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
-        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
-                viewModel.loadData()
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-        }
-    }
+    HomeScreenContent(
+        uiState = uiState,
+        onNavigateToAddMedicine = onNavigateToAddMedicine,
+        onSelectMember = viewModel::selectMember,
+        onMarkTaken = viewModel::markDoseTaken,
+        onMarkSkipped = viewModel::markDoseSkipped,
+        modifier = modifier
+    )
+}
 
-    // Request notification runtime permission on Android 13+ (API 33+)
-    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-        val permissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-            contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-        ) { /* permission callback */ }
+@Composable
+fun HomeScreenContent(
+    uiState: HomeUiState,
+    onNavigateToAddMedicine: () -> Unit,
+    onSelectMember: (String?) -> Unit,
+    onMarkTaken: (String) -> Unit,
+    onMarkSkipped: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = TulsiTheme.colors
 
-        androidx.compose.runtime.LaunchedEffect(Unit) {
-            val permissionCheck = androidx.core.content.ContextCompat.checkSelfPermission(
-                context,
-                android.Manifest.permission.POST_NOTIFICATIONS
-            )
-            if (permissionCheck != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                permissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-            }
-        }
-    }
+    // Format current date
+    val dateFormat = SimpleDateFormat("EEEE, MMM d", Locale.getDefault())
+    val todayFormatted = dateFormat.format(Date())
+
+    // Filter doses if a specific person is selected
+    val filteredDoses = if (uiState.selectedMemberId != null) {
+        uiState.todayDoses.filter { it.assignedMemberId == uiState.selectedMemberId }
+    } else {
+        uiState.todayDoses
+    }.distinctBy { it.id }
+
+    val totalDoses = filteredDoses.size
+    val takenDoses = filteredDoses.count { it.status == DoseStatus.TAKEN }
+    val progressSubtext = if (totalDoses > 0) "$takenDoses of $totalDoses taken" else "No scheduled doses today"
+
+    // Group doses into Morning, Afternoon, Evening
+    val groupedDoses = groupDosesByTimeOfDay(filteredDoses)
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Image(
-                            painter = painterResource(id = R.drawable.ic_tulsi_logo),
-                            contentDescription = "Tulsi Logo",
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                        )
-                        Column {
-                            Text(
-                                text = "Tulsi",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.secondary
-                            )
-                            Text(
-                                text = if (uiState.currentGroup != null) uiState.currentGroup!!.name else "Take care, together.",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                },
-                actions = {
-                    IconButton(onClick = onNavigateToHistory) {
-                        Icon(
-                            imageVector = Icons.Default.History,
-                            contentDescription = "History & Reports",
-                            tint = PrimaryTeal
-                        )
-                    }
-                    IconButton(onClick = onNavigateToFamily) {
-                        Icon(
-                            imageVector = Icons.Default.Group,
-                            contentDescription = "Family Circle",
-                            tint = PrimaryTeal
-                        )
-                    }
-                    IconButton(onClick = onNavigateToBatterySettings) {
-                        Icon(
-                            imageVector = Icons.Default.BatteryAlert,
-                            contentDescription = "Battery Settings",
-                            tint = PrimaryTeal
-                        )
-                    }
-                    IconButton(onClick = onSignOut) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.Logout,
-                            contentDescription = "Switch Account / Sign Out",
-                            tint = PrimaryTeal
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
-            )
-        },
+        modifier = modifier.fillMaxSize(),
+        containerColor = colors.background,
         floatingActionButton = {
+            // Single black circular button with '+'
             FloatingActionButton(
                 onClick = onNavigateToAddMedicine,
-                containerColor = PrimaryTeal,
-                contentColor = Color.White,
-                shape = RoundedCornerShape(16.dp)
+                containerColor = colors.buttonPrimary,
+                contentColor = colors.buttonText,
+                shape = CircleShape,
+                modifier = Modifier.size(56.dp)
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = null)
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Add Medicine", style = MaterialTheme.typography.labelLarge)
-                }
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Add Medicine",
+                    tint = colors.buttonText,
+                    modifier = Modifier.size(24.dp)
+                )
             }
-        },
-        containerColor = MaterialTheme.colorScheme.background
+        }
     ) { innerPadding ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+                .padding(innerPadding),
+            contentPadding = PaddingValues(bottom = 88.dp)
         ) {
-            // Test Alarm Quick Action Card (Test/Debug builds only)
-            if (BuildConfig.DEBUG) {
-                item {
-                    Card(
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = PrimaryTeal.copy(alpha = 0.12f)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Test Alarm Screen",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = DeepNavy
-                                )
-                                Text(
-                                    text = "Test the full-screen alarm, ringtone, and vibration right now.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Button(
-                                onClick = { viewModel.triggerTestAlarm(context) },
-                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryTeal),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Icon(Icons.Default.NotificationsActive, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Test Alarm")
-                            }
-                        }
-                    }
+            // Title & subtext header
+            item(key = "header") {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = TulsiScreenPadding, vertical = 20.dp)
+                ) {
+                    Text(
+                        text = todayFormatted,
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = colors.textPrimary,
+                        letterSpacing = (-0.5).sp
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = progressSubtext,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Normal,
+                        color = colors.textSecondary
+                    )
                 }
             }
 
-            // Simple Mode Toggle Card
-            item {
-                Card(
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
+            // Admin Person Filter Chips
+            if (uiState.isAdmin && uiState.members.isNotEmpty()) {
+                item(key = "admin_filter") {
+                    LazyRow(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                            .padding(bottom = 12.dp),
+                        contentPadding = PaddingValues(horizontal = TulsiScreenPadding),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Column {
-                            Text(
-                                text = "Simple Mode (Senior Friendly)",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.secondary
-                            )
-                            Text(
-                                text = "Extra-large text and 64dp buttons",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                        item {
+                            PersonChip(
+                                label = "Everyone",
+                                isSelected = uiState.selectedMemberId == null,
+                                onClick = { onSelectMember(null) }
                             )
                         }
-                        Switch(
-                            checked = uiState.isSimpleMode,
-                            onCheckedChange = { viewModel.toggleSimpleMode(it) }
+                        items(uiState.members, key = { it.userId }) { member ->
+                            PersonChip(
+                                label = member.displayName.ifBlank { "Member" },
+                                isSelected = uiState.selectedMemberId == member.userId,
+                                onClick = { onSelectMember(member.userId) }
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Empty State
+            if (filteredDoses.isEmpty()) {
+                item(key = "empty_state") {
+                    Spacer(modifier = Modifier.height(48.dp))
+                    TulsiEmptyState(
+                        title = "No doses scheduled",
+                        message = "All doses for today have been taken or there are no medicines scheduled.",
+                        actionButton = {
+                            TulsiButton(
+                                text = "Add a medicine",
+                                onClick = onNavigateToAddMedicine
+                            )
+                        }
+                    )
+                }
+            } else {
+                // Render doses grouped by time of day (Morning, Afternoon, Evening)
+                groupedDoses.forEach { (timeSlot, doses) ->
+                    item(key = "section_$timeSlot") {
+                        TulsiSectionHeader(title = timeSlot)
+                    }
+
+                    items(doses, key = { it.id }) { doseEvent ->
+                        val isPending = doseEvent.status == DoseStatus.PENDING
+                        val isTaken = doseEvent.status == DoseStatus.TAKEN
+                        val timeStr = formatDoseTime(doseEvent.scheduledAt)
+
+                        TulsiListRow(
+                            title = doseEvent.medicineName,
+                            subtitle = "${doseEvent.dosage} · $timeStr",
+                            leadingContent = {
+                                if (isTaken) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(24.dp)
+                                            .background(colors.accent, CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = "Taken",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                } else {
+                                    TulsiStatusDot(
+                                        status = doseEvent.status,
+                                        showLabel = false,
+                                        dotSize = 10.dp
+                                    )
+                                }
+                            },
+                            trailingContent = {
+                                if (isPending) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        TulsiTextButton(
+                                            text = "Skip",
+                                            onClick = { onMarkSkipped(doseEvent.id) },
+                                            textColor = colors.textSecondary
+                                        )
+                                        TulsiButton(
+                                            text = "Take",
+                                            onClick = { onMarkTaken(doseEvent.id) }
+                                        )
+                                    }
+                                } else {
+                                    TulsiStatusDot(
+                                        status = doseEvent.status,
+                                        showLabel = true
+                                    )
+                                }
+                            },
+                            showDivider = true
                         )
                     }
                 }
-            }
-
-            // Section 1: Today's Schedule
-            item {
-                Text(
-                    text = "Today's Schedule",
-                    style = if (uiState.isSimpleMode) MaterialTheme.typography.headlineMedium.copy(fontSize = 24.sp) else MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.secondary
-                )
-            }
-
-            if (uiState.todayDoses.isEmpty()) {
-                item {
-                    Card(
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Medication,
-                                contentDescription = null,
-                                tint = PrimaryTeal,
-                                modifier = Modifier.size(48.dp)
-                            )
-                            Text(
-                                text = "No doses scheduled for today",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.secondary
-                            )
-                            Text(
-                                text = "Tap '+ Add Medicine' below to create a schedule with local exact alarms.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-            } else {
-                items(uiState.todayDoses) { dose ->
-                    DoseCard(
-                        dose = dose,
-                        isSimpleMode = uiState.isSimpleMode,
-                        onTake = { viewModel.markDoseTaken(dose.id) },
-                        onSkip = { viewModel.markDoseSkipped(dose.id) }
-                    )
-                }
-            }
-
-            // Section 2: Active Medicines
-            item {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Active Medicines",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.secondary
-                )
-            }
-
-            if (uiState.medicines.isEmpty()) {
-                item {
-                    Card(
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text(
-                                text = "No medicines added yet",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.secondary
-                            )
-                            Text(
-                                text = "Add your prescriptions and daily vitamins to keep track.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-            } else {
-                items(uiState.medicines) { med ->
-                    MedicineCard(
-                        medicine = med,
-                        onEdit = { onNavigateToEditMedicine(med.id) }
-                    )
-                }
-            }
-
-            item {
-                Spacer(modifier = Modifier.height(80.dp)) // Space for FAB
             }
         }
     }
 }
 
 @Composable
-fun DoseCard(
-    dose: DoseEvent,
-    isSimpleMode: Boolean = false,
-    onTake: () -> Unit,
-    onSkip: () -> Unit
+private fun PersonChip(
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
 ) {
-    val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
-    val formattedTime = timeFormat.format(Date(dose.scheduledAt))
+    val colors = TulsiTheme.colors
 
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    Box(
         modifier = Modifier
-            .fillMaxWidth()
-            .then(
-                if (isSimpleMode) Modifier.border(2.dp, PrimaryTeal, RoundedCornerShape(16.dp))
-                else Modifier
+            .clickable(onClick = onClick)
+            .background(
+                color = if (isSelected) colors.buttonPrimary else Color.Transparent,
+                shape = RoundedCornerShape(TulsiCornerRadius)
             )
+            .border(
+                width = TulsiBorderWidth,
+                color = if (isSelected) colors.buttonPrimary else colors.border,
+                shape = RoundedCornerShape(TulsiCornerRadius)
+            )
+            .padding(horizontal = 14.dp, vertical = 7.dp),
+        contentAlignment = Alignment.Center
     ) {
-        Column(
-            modifier = Modifier.padding(if (isSimpleMode) 20.dp else 16.dp),
-            verticalArrangement = Arrangement.spacedBy(if (isSimpleMode) 16.dp else 12.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(if (isSimpleMode) 52.dp else 40.dp)
-                            .clip(CircleShape)
-                            .background(PrimaryTeal.copy(alpha = 0.15f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Medication,
-                            contentDescription = null,
-                            tint = PrimaryTeal,
-                            modifier = Modifier.size(if (isSimpleMode) 28.dp else 22.dp)
-                        )
-                    }
-                    Column {
-                        Text(
-                            text = dose.medicineName,
-                            style = if (isSimpleMode) {
-                                MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp, lineHeight = 28.sp)
-                            } else {
-                                MaterialTheme.typography.titleMedium
-                            },
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.secondary
-                        )
-                        Text(
-                            text = if (dose.dosage.isNotBlank()) dose.dosage else "1 dose",
-                            style = if (isSimpleMode) {
-                                MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp)
-                            } else {
-                                MaterialTheme.typography.bodySmall
-                            },
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                // Time Badge
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant
-                ) {
-                    Row(
-                        modifier = Modifier.padding(
-                            horizontal = if (isSimpleMode) 12.dp else 8.dp,
-                            vertical = if (isSimpleMode) 6.dp else 4.dp
-                        ),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.AccessTime,
-                            contentDescription = null,
-                            modifier = Modifier.size(if (isSimpleMode) 18.dp else 14.dp),
-                            tint = PrimaryTeal
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = formattedTime,
-                            style = if (isSimpleMode) MaterialTheme.typography.labelLarge.copy(fontSize = 16.sp)
-                            else MaterialTheme.typography.labelMedium
-                        )
-                    }
-                }
-            }
-
-            // Status or Action Buttons
-            when (dose.status) {
-                DoseStatus.TAKEN -> {
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = StatusTakenGreen.copy(alpha = 0.15f),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(vertical = if (isSimpleMode) 14.dp else 8.dp, horizontal = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Icon(Icons.Default.Check, contentDescription = null, tint = StatusTakenGreen, modifier = Modifier.size(if (isSimpleMode) 24.dp else 18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Taken", color = StatusTakenGreen, fontWeight = FontWeight.Bold, fontSize = if (isSimpleMode) 18.sp else 14.sp)
-                        }
-                    }
-                }
-                DoseStatus.SKIPPED -> {
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(vertical = if (isSimpleMode) 14.dp else 8.dp, horizontal = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Icon(Icons.Default.Close, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(if (isSimpleMode) 24.dp else 18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Skipped", color = Color.Gray, fontWeight = FontWeight.Bold, fontSize = if (isSimpleMode) 18.sp else 14.sp)
-                        }
-                    }
-                }
-                DoseStatus.SNOOZED -> {
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = StatusSnoozeAmber.copy(alpha = 0.15f),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(vertical = if (isSimpleMode) 14.dp else 8.dp, horizontal = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Icon(Icons.Default.AccessTime, contentDescription = null, tint = StatusSnoozeAmber, modifier = Modifier.size(if (isSimpleMode) 24.dp else 18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Snoozed", color = StatusSnoozeAmber, fontWeight = FontWeight.Bold, fontSize = if (isSimpleMode) 18.sp else 14.sp)
-                        }
-                    }
-                }
-                else -> {
-                    // PENDING or MISSED: show Action Buttons
-                    if (isSimpleMode) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Button(
-                                onClick = onTake,
-                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryTeal),
-                                shape = RoundedCornerShape(14.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(64.dp)
-                            ) {
-                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(24.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Take Medicine", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                            }
-
-                            OutlinedButton(
-                                onClick = onSkip,
-                                shape = RoundedCornerShape(14.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(48.dp)
-                            ) {
-                                Text("Skip", fontSize = 16.sp)
-                            }
-                        }
-                    } else {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Button(
-                                onClick = onTake,
-                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryTeal),
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Take")
-                            }
-
-                            OutlinedButton(
-                                onClick = onSkip,
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("Skip")
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        Text(
+            text = label,
+            fontSize = 14.sp,
+            fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal,
+            color = if (isSelected) colors.buttonText else colors.textPrimary
+        )
     }
 }
 
-@Composable
-fun MedicineCard(
-    medicine: Medicine,
-    onEdit: () -> Unit
-) {
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onEdit() }
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(CircleShape)
-                        .background(PrimaryTeal.copy(alpha = 0.12f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Medication,
-                        contentDescription = null,
-                        tint = PrimaryTeal,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
+private fun groupDosesByTimeOfDay(doses: List<DoseEvent>): Map<String, List<DoseEvent>> {
+    val morning = mutableListOf<DoseEvent>()
+    val afternoon = mutableListOf<DoseEvent>()
+    val evening = mutableListOf<DoseEvent>()
 
-                Column {
-                    Text(
-                        text = medicine.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.secondary
-                    )
-                    Text(
-                        text = "${medicine.dosage} • ${medicine.form.name.lowercase().replaceFirstChar { it.uppercase() }}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    if (medicine.instructions.isNotBlank()) {
-                        Text(
-                            text = medicine.instructions,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = PrimaryTeal
-                        )
-                    }
-                }
-            }
-
-            IconButton(onClick = onEdit) {
-                Icon(
-                    imageVector = Icons.Default.Edit,
-                    contentDescription = "Edit Medicine",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+    val calendar = Calendar.getInstance()
+    doses.sortedBy { it.scheduledAt }.forEach { dose ->
+        calendar.timeInMillis = dose.scheduledAt
+        val hour = calendar.get(Calendar.HOUR_OF_DAY)
+        when {
+            hour < 12 -> morning.add(dose)
+            hour < 17 -> afternoon.add(dose)
+            else -> evening.add(dose)
         }
     }
+
+    val result = mutableMapOf<String, List<DoseEvent>>()
+    if (morning.isNotEmpty()) result["Morning"] = morning
+    if (afternoon.isNotEmpty()) result["Afternoon"] = afternoon
+    if (evening.isNotEmpty()) result["Evening"] = evening
+    return result
+}
+
+private fun formatDoseTime(epochMillis: Long): String {
+    val sdf = SimpleDateFormat("h:mm a", Locale.getDefault())
+    return sdf.format(Date(epochMillis))
+}
+
+// -----------------------------------------------------------------------------
+// Previews: Light, Dark, 1.5x Font Scale
+// -----------------------------------------------------------------------------
+
+@Preview(name = "Today - Light", showBackground = true)
+@Composable
+fun HomeScreenPreviewLight() {
+    TulsiTheme(darkTheme = false) {
+        HomeScreenContent(
+            uiState = getSampleHomeUiState(),
+            onNavigateToAddMedicine = {},
+            onSelectMember = {},
+            onMarkTaken = {},
+            onMarkSkipped = {}
+        )
+    }
+}
+
+@Preview(name = "Today - Dark", showBackground = true)
+@Composable
+fun HomeScreenPreviewDark() {
+    TulsiTheme(darkTheme = true) {
+        HomeScreenContent(
+            uiState = getSampleHomeUiState(),
+            onNavigateToAddMedicine = {},
+            onSelectMember = {},
+            onMarkTaken = {},
+            onMarkSkipped = {}
+        )
+    }
+}
+
+@Preview(name = "Today - 1.5x Font Scale", fontScale = 1.5f, showBackground = true)
+@Composable
+fun HomeScreenPreviewLargeFont() {
+    TulsiTheme(darkTheme = false) {
+        HomeScreenContent(
+            uiState = getSampleHomeUiState(),
+            onNavigateToAddMedicine = {},
+            onSelectMember = {},
+            onMarkTaken = {},
+            onMarkSkipped = {}
+        )
+    }
+}
+
+private fun getSampleHomeUiState(): HomeUiState {
+    val now = System.currentTimeMillis()
+    return HomeUiState(
+        todayDoses = listOf(
+            DoseEvent(id = "1", medicineName = "Metformin", dosage = "500mg", scheduledAt = now, status = DoseStatus.PENDING),
+            DoseEvent(id = "2", medicineName = "Aspirin", dosage = "75mg", scheduledAt = now, status = DoseStatus.TAKEN),
+            DoseEvent(id = "3", medicineName = "Atorvastatin", dosage = "20mg", scheduledAt = now + 36000000L, status = DoseStatus.PENDING)
+        ),
+        isAdmin = true,
+        members = listOf(
+            GroupMember(userId = "1", displayName = "Asha", role = MemberRole.ADMIN),
+            GroupMember(userId = "2", displayName = "Ravi", role = MemberRole.MEMBER)
+        ),
+        isLoading = false
+    )
 }

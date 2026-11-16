@@ -7,53 +7,49 @@ import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.NotificationsActive
-import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.lifecycleScope
 import com.tulsicare.app.core.alarm.AlarmPlaybackService
 import com.tulsicare.app.core.alarm.AlarmReceiver
 import com.tulsicare.app.core.alarm.ExactAlarmScheduler
 import com.tulsicare.app.core.data.repository.AuthRepository
 import com.tulsicare.app.core.data.repository.DoseEventRepository
 import com.tulsicare.app.core.data.repository.MedicineRepository
+import com.tulsicare.app.core.designsystem.TulsiBorderWidth
+import com.tulsicare.app.core.designsystem.TulsiCornerRadius
 import com.tulsicare.app.core.designsystem.TulsiTheme
-import com.tulsicare.app.core.designsystem.PrimaryTeal
 import com.tulsicare.app.core.model.DoseStatus
 import dagger.hilt.android.AndroidEntryPoint
-import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.UUID
 import javax.inject.Inject
 
@@ -72,12 +68,14 @@ class AlarmActivity : ComponentActivity() {
         val medicineName = intent.getStringExtra(AlarmReceiver.EXTRA_MEDICINE_NAME) ?: "Medicine"
         val dosage = intent.getStringExtra(AlarmReceiver.EXTRA_DOSAGE) ?: ""
         val scheduleId = intent.getStringExtra(AlarmReceiver.EXTRA_SCHEDULE_ID) ?: ""
+        val personName = intent.getStringExtra("EXTRA_PERSON_NAME") ?: ""
 
         setContent {
-            TulsiTheme {
+            TulsiTheme(darkTheme = true) {
                 AlarmReminderContent(
                     medicineName = medicineName,
                     dosage = dosage,
+                    personName = personName,
                     onTaken = {
                         AlarmPlaybackService.stop(this)
                         lifecycleScope.launch {
@@ -155,170 +153,171 @@ class AlarmActivity : ComponentActivity() {
     }
 }
 
+/**
+ * Minimalist Pure Black Alarm Screen:
+ * - Pure black background
+ * - Large time
+ * - Medicine name and person
+ * - Three big buttons: Taken (solid white), Snooze (outlined), Skip (text)
+ */
 @Composable
 fun AlarmReminderContent(
     medicineName: String,
     dosage: String,
+    personName: String = "",
     onTaken: () -> Unit,
     onSnooze: (Int) -> Unit,
-    onSkip: () -> Unit
+    onSkip: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    var showSnoozeOptions by remember { mutableStateOf(false) }
+    val currentTime = SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date())
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        modifier = Modifier.fillMaxSize()
+        modifier = modifier.fillMaxSize(),
+        containerColor = Color.Black
     ) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(28.dp),
+                .padding(horizontal = 28.dp, vertical = 40.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // Header: Friendly Pill Alarm Visual
+            // Top: Time & Medicine Info
             Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.padding(top = 40.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 40.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(96.dp)
-                        .clip(CircleShape)
-                        .background(PrimaryTeal.copy(alpha = 0.15f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.NotificationsActive,
-                        contentDescription = null,
-                        tint = PrimaryTeal,
-                        modifier = Modifier.size(52.dp)
-                    )
-                }
-
+                // Large Time (44sp)
                 Text(
-                    text = "Time for your medicine",
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.secondary
+                    text = currentTime,
+                    fontSize = 44.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFFFAFAFA),
+                    letterSpacing = (-1).sp
                 )
 
-                Surface(
-                    shape = MaterialTheme.shapes.large,
-                    color = MaterialTheme.colorScheme.surface,
-                    shadowElevation = 4.dp,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier.padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = medicineName,
-                            style = MaterialTheme.typography.displaySmall,
-                            color = MaterialTheme.colorScheme.secondary
-                        )
-                        if (dosage.isNotBlank()) {
-                            Text(
-                                text = dosage,
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                Spacer(modifier = Modifier.height(28.dp))
+
+                // Medicine Name (28sp title)
+                Text(
+                    text = medicineName,
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Dose & Person Subtext
+                val subtext = buildString {
+                    if (dosage.isNotBlank()) append(dosage)
+                    if (personName.isNotBlank()) {
+                        if (isNotEmpty()) append(" · ")
+                        append("For $personName")
                     }
+                }
+
+                if (subtext.isNotBlank()) {
+                    Text(
+                        text = subtext,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Normal,
+                        color = Color(0xFF9A9A9A),
+                        textAlign = TextAlign.Center
+                    )
                 }
             }
 
-            // Action Buttons
+            // Bottom: Three Big Action Buttons
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                if (showSnoozeOptions) {
-                    // Snooze interval picker (5 / 10 / 15 min)
-                    Text(
-                        text = "Snooze for how long?",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.secondary,
-                        modifier = Modifier.align(Alignment.CenterHorizontally)
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        listOf(5, 10, 15).forEach { min ->
-                            OutlinedButton(
-                                onClick = { onSnooze(min) },
-                                shape = MaterialTheme.shapes.medium,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(52.dp)
-                            ) {
-                                Text("$min min", style = MaterialTheme.typography.labelLarge)
-                            }
-                        }
-                    }
-                }
-
-                // Primary Action: Taken
+                // 1. Taken: Solid White with Black text
                 Button(
                     onClick = onTaken,
-                    shape = MaterialTheme.shapes.medium,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = TulsiTheme.semanticColors.taken
-                    ),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(56.dp)
+                        .defaultMinSize(minHeight = 56.dp),
+                    shape = RoundedCornerShape(TulsiCornerRadius),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.White,
+                        contentColor = Color.Black
+                    )
                 ) {
-                    Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(22.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Mark as Taken",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = androidx.compose.ui.graphics.Color.White
+                        text = "Taken",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.Black
                     )
                 }
 
-                // Secondary Action: Snooze
-                Button(
-                    onClick = { showSnoozeOptions = !showSnoozeOptions },
-                    shape = MaterialTheme.shapes.medium,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = TulsiTheme.semanticColors.snooze
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp)
-                ) {
-                    Icon(Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(20.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = if (showSnoozeOptions) "Cancel Snooze" else "Snooze (10 min)",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = androidx.compose.ui.graphics.Color.White
-                    )
-                }
-
-                // Tertiary Action: Skip
+                // 2. Snooze: Outlined White with transparent background
                 OutlinedButton(
-                    onClick = onSkip,
-                    shape = MaterialTheme.shapes.medium,
+                    onClick = { onSnooze(10) }, // Default 10 min snooze
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(48.dp)
+                        .defaultMinSize(minHeight = 56.dp),
+                    shape = RoundedCornerShape(TulsiCornerRadius),
+                    border = BorderStroke(TulsiBorderWidth, Color.White),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = Color.Transparent,
+                        contentColor = Color.White
+                    )
                 ) {
-                    Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "Skip this dose",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = TulsiTheme.semanticColors.skipped
+                        text = "Snooze (10 min)",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color.White
+                    )
+                }
+
+                // 3. Skip: Quiet text button
+                TextButton(
+                    onClick = onSkip,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .defaultMinSize(minHeight = 48.dp),
+                    shape = RoundedCornerShape(TulsiCornerRadius),
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = Color(0xFF9A9A9A)
+                    )
+                ) {
+                    Text(
+                        text = "Skip dose",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Normal,
+                        color = Color(0xFF9A9A9A)
                     )
                 }
             }
         }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Preview: Pure Black Alarm Screen
+// -----------------------------------------------------------------------------
+
+@Preview(name = "Alarm Screen", showBackground = true, backgroundColor = 0xFF000000)
+@Composable
+fun AlarmReminderContentPreview() {
+    TulsiTheme(darkTheme = true) {
+        AlarmReminderContent(
+            medicineName = "Metformin",
+            dosage = "500mg",
+            personName = "Ravi",
+            onTaken = {},
+            onSnooze = {},
+            onSkip = {}
+        )
     }
 }

@@ -1,16 +1,24 @@
 package com.tulsicare.app.feature.settings
 
+import android.Manifest
 import android.app.AlarmManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,30 +27,22 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.OpenInNew
-import androidx.compose.material.icons.filled.BatteryAlert
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.NotificationsActive
-import androidx.compose.material.icons.filled.PhoneAndroid
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.outlined.BatteryAlert
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -54,40 +54,60 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
-import com.tulsicare.app.core.designsystem.DeepNavy
-import com.tulsicare.app.core.designsystem.PrimaryTeal
-import com.tulsicare.app.core.designsystem.StatusSnoozeAmber
-import com.tulsicare.app.core.designsystem.StatusTakenGreen
+import com.tulsicare.app.core.designsystem.TulsiBorderWidth
+import com.tulsicare.app.core.designsystem.TulsiCornerRadius
+import com.tulsicare.app.core.designsystem.TulsiScreenPadding
+import com.tulsicare.app.core.designsystem.TulsiTheme
+import com.tulsicare.app.core.designsystem.component.TulsiButton
+import com.tulsicare.app.core.designsystem.component.TulsiListRow
+import com.tulsicare.app.core.designsystem.component.TulsiOutlinedButton
+import com.tulsicare.app.core.designsystem.component.TulsiSectionHeader
+import com.tulsicare.app.core.designsystem.component.TulsiStatusDot
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BatteryOptimizationScreen(
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    var isBatteryIgnoringOptimizations by remember { mutableStateOf(false) }
-    var canScheduleExactAlarms by remember { mutableStateOf(false) }
+    var isNotificationsAllowed by remember { mutableStateOf(true) }
+    var canScheduleExactAlarms by remember { mutableStateOf(true) }
+    var isBatteryIgnoringOptimizations by remember { mutableStateOf(true) }
+    var showManufacturerSteps by remember { mutableStateOf(false) }
 
     fun refreshPermissions() {
-        val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
-        isBatteryIgnoringOptimizations = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            powerManager?.isIgnoringBatteryOptimizations(context.packageName) == true
-        } else true
+        // 1. Notifications
+        isNotificationsAllowed = NotificationManagerCompat.from(context).areNotificationsEnabled()
 
+        // 2. Exact Alarms
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
         canScheduleExactAlarms = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             alarmManager?.canScheduleExactAlarms() == true
-        } else true
+        } else {
+            true
+        }
+
+        // 3. Battery Optimizations
+        val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+        isBatteryIgnoringOptimizations = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            powerManager?.isIgnoringBatteryOptimizations(context.packageName) == true
+        } else {
+            true
+        }
     }
 
     LaunchedEffect(lifecycleOwner) {
@@ -96,398 +116,308 @@ fun BatteryOptimizationScreen(
         }
     }
 
-    val manufacturer = Build.MANUFACTURER.lowercase()
+    val notifPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) {
+        refreshPermissions()
+    }
+
+    val colors = TulsiTheme.colors
+    val totalIssues = listOf(isNotificationsAllowed, canScheduleExactAlarms, isBatteryIgnoringOptimizations).count { !it }
+    val manufacturer = Build.MANUFACTURER.replaceFirstChar { it.uppercase() }
 
     Scaffold(
+        modifier = modifier.fillMaxSize(),
+        containerColor = colors.background,
         topBar = {
             TopAppBar(
                 title = {
                     Text(
-                        text = "Alarm Reliability",
-                        style = MaterialTheme.typography.titleLarge
+                        text = "Reminder reliability",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = colors.textPrimary
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = colors.textPrimary
+                        )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    titleContentColor = MaterialTheme.colorScheme.secondary
-                )
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = colors.background)
             )
-        },
-        containerColor = MaterialTheme.colorScheme.background
+        }
     ) { innerPadding ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+                .padding(innerPadding),
+            contentPadding = PaddingValues(horizontal = TulsiScreenPadding, vertical = 12.dp)
         ) {
-            // Explanation Header
-            Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = PrimaryTeal.copy(alpha = 0.10f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
+            // Overall Status Top Banner
+            item(key = "overall_status") {
                 Row(
-                    modifier = Modifier.padding(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(TulsiBorderWidth, colors.border, RoundedCornerShape(TulsiCornerRadius))
+                        .background(colors.surface, RoundedCornerShape(TulsiCornerRadius))
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Info,
-                        contentDescription = null,
-                        tint = PrimaryTeal,
-                        modifier = Modifier.size(24.dp)
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .background(
+                                color = if (totalIssues == 0) colors.statusTaken else colors.statusSnoozed,
+                                shape = CircleShape
+                            )
                     )
+                    Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = "To ensure reminders ring on time even when your phone is locked or deep in sleep, Android requires unrestricted background power for alarms.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface
+                        text = if (totalIssues == 0) "All set — alarms and notifications are ready" else "$totalIssues thing${if (totalIssues > 1) "s need" else " needs"} attention",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = colors.textPrimary
                     )
                 }
+
+                Spacer(modifier = Modifier.height(24.dp))
+                TulsiSectionHeader(title = "Core permissions", horizontalPadding = 0.dp)
             }
 
-            // Status Card 1: Battery Optimization
-            Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Icon(
-                                imageVector = if (isBatteryIgnoringOptimizations) Icons.Default.CheckCircle else Icons.Default.BatteryAlert,
-                                contentDescription = null,
-                                tint = if (isBatteryIgnoringOptimizations) StatusTakenGreen else StatusSnoozeAmber
-                            )
-                            Text(
-                                text = "Battery Optimization",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.secondary
-                            )
-                        }
-
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = if (isBatteryIgnoringOptimizations) StatusTakenGreen.copy(alpha = 0.15f) else StatusSnoozeAmber.copy(alpha = 0.15f)
-                        ) {
-                            Text(
-                                text = if (isBatteryIgnoringOptimizations) "Unrestricted" else "Optimized",
-                                color = if (isBatteryIgnoringOptimizations) StatusTakenGreen else StatusSnoozeAmber,
-                                style = MaterialTheme.typography.labelMedium,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
-                        }
-                    }
-
-                    Text(
-                        text = if (isBatteryIgnoringOptimizations) {
-                            "Great! The system will not suppress alarms when the battery is low or in Doze mode."
+            // 1. Notifications Row
+            item(key = "notif_row") {
+                ReliabilityItem(
+                    title = "Notifications",
+                    isAllowed = isNotificationsAllowed,
+                    onFix = {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                         } else {
-                            "Android may delay alarms when the screen has been off for a while. Tap below to disable battery restrictions."
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    if (!isBatteryIgnoringOptimizations) {
-                        Button(
-                            onClick = {
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                                    val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                                        data = Uri.parse("package:${context.packageName}")
-                                    }
-                                    runCatching { context.startActivity(intent) }.onFailure {
-                                        context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
-                                    }
-                                }
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryTeal),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Disable Battery Restriction")
+                            val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                                putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                            }
+                            context.startActivity(intent)
                         }
                     }
-                }
+                )
+                HorizontalDivider(thickness = TulsiBorderWidth, color = colors.border)
             }
 
-            // Status Card 2: Exact Alarms
-            Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+            // 2. Exact Alarms Row
+            item(key = "alarm_row") {
+                ReliabilityItem(
+                    title = "Exact alarms",
+                    isAllowed = canScheduleExactAlarms,
+                    onFix = {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                            val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                                data = Uri.parse("package:${context.packageName}")
+                            }
+                            context.startActivity(intent)
+                        }
+                    }
+                )
+                HorizontalDivider(thickness = TulsiBorderWidth, color = colors.border)
+            }
+
+            // 3. Battery Optimization Row
+            item(key = "battery_row") {
+                ReliabilityItem(
+                    title = "Battery optimization",
+                    isAllowed = isBatteryIgnoringOptimizations,
+                    onFix = {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                data = Uri.parse("package:${context.packageName}")
+                            }
+                            context.startActivity(intent)
+                        }
+                    }
+                )
+                HorizontalDivider(thickness = TulsiBorderWidth, color = colors.border)
+            }
+
+            // Collapsible Manufacturer-specific steps
+            item(key = "oem_steps") {
+                Spacer(modifier = Modifier.height(28.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showManufacturerSteps = !showManufacturerSteps }
+                        .border(TulsiBorderWidth, colors.border, RoundedCornerShape(TulsiCornerRadius))
+                        .background(colors.surface, RoundedCornerShape(TulsiCornerRadius))
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Icon(
-                                imageVector = if (canScheduleExactAlarms) Icons.Default.CheckCircle else Icons.Default.Warning,
-                                contentDescription = null,
-                                tint = if (canScheduleExactAlarms) StatusTakenGreen else StatusSnoozeAmber
-                            )
-                            Text(
-                                text = "Exact Alarms & Reminders",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.secondary
-                            )
-                        }
-
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = if (canScheduleExactAlarms) StatusTakenGreen.copy(alpha = 0.15f) else StatusSnoozeAmber.copy(alpha = 0.15f)
-                        ) {
-                            Text(
-                                text = if (canScheduleExactAlarms) "Allowed" else "Restricted",
-                                color = if (canScheduleExactAlarms) StatusTakenGreen else StatusSnoozeAmber,
-                                style = MaterialTheme.typography.labelMedium,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
-                        }
-                    }
-
-                    Text(
-                        text = if (canScheduleExactAlarms) {
-                            "Exact alarm scheduling is enabled. Reminders will ring precisely at the scheduled minute."
-                        } else {
-                            "Permission needed to schedule alarms to the exact minute on Android 12+."
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    if (!canScheduleExactAlarms && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                        Button(
-                            onClick = {
-                                val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
-                                    data = Uri.parse("package:${context.packageName}")
-                                }
-                                runCatching { context.startActivity(intent) }
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryTeal),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Icon(Icons.Default.NotificationsActive, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Allow Exact Alarms")
-                        }
-                    }
-                }
-            }
-
-            // OEM Brand Guides
-            Text(
-                text = "Manufacturer-Specific Settings",
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.secondary
-            )
-
-            // Xiaomi Guide
-            BrandGuideCard(
-                brandName = "Xiaomi / Redmi / POCO",
-                isCurrentDevice = manufacturer.contains("xiaomi") || manufacturer.contains("redmi") || manufacturer.contains("poco"),
-                steps = listOf(
-                    "Open Settings > Apps > Manage Apps > tulsi",
-                    "Turn ON 'Autostart'",
-                    "Under 'Battery Saver', choose 'No restrictions'",
-                    "In 'Other Permissions', enable 'Show on Lock Screen' and 'Display pop-up windows'"
-                )
-            )
-
-            // Oppo & Realme Guide
-            BrandGuideCard(
-                brandName = "OPPO / Realme",
-                isCurrentDevice = manufacturer.contains("oppo") || manufacturer.contains("realme"),
-                steps = listOf(
-                    "Open Settings > Battery > More Battery Settings",
-                    "Tap 'App battery management' > tulsi",
-                    "Enable 'Allow foreground activity' and 'Allow background activity'",
-                    "Turn ON 'Allow auto-launch'"
-                )
-            )
-
-            // Vivo Guide
-            BrandGuideCard(
-                brandName = "Vivo / iQOO",
-                isCurrentDevice = manufacturer.contains("vivo") || manufacturer.contains("iqoo"),
-                steps = listOf(
-                    "Open Settings > Battery > Background power consumption management",
-                    "Find tulsi and select 'High background power consumption'",
-                    "Open Settings > Applications and Permissions > Autostart > Enable tulsi"
-                )
-            )
-
-            // Samsung Guide
-            BrandGuideCard(
-                brandName = "Samsung Galaxy",
-                isCurrentDevice = manufacturer.contains("samsung"),
-                steps = listOf(
-                    "Open Settings > Apps > tulsi > Battery",
-                    "Select 'Unrestricted'",
-                    "Go to Settings > Battery > Background usage limits",
-                    "Make sure tulsi is in 'Never sleeping apps'"
-                )
-            )
-
-            // Generic App Settings button
-            OutlinedButton(
-                onClick = {
-                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                        data = Uri.parse("package:${context.packageName}")
-                    }
-                    context.startActivity(intent)
-                },
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp)
-            ) {
-                Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Open App System Settings")
-            }
-
-            // Privacy Policy & Medical Disclaimer Card
-            Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Info,
-                            contentDescription = "Privacy & Disclaimer",
-                            tint = PrimaryTeal
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Extra steps for your phone ($manufacturer)",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = colors.textPrimary
                         )
                         Text(
-                            text = "Privacy & Medical Disclaimer",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.secondary
+                            text = "Keep alarms ringing when the phone sleeps",
+                            fontSize = 12.sp,
+                            color = colors.textSecondary
                         )
                     }
 
-                    Text(
-                        text = "Medical Disclaimer: Tulsi is an adherence self-tracking reminder application. It does not provide medical diagnosis, clinical treatment advice, or drug interaction checks. Always follow the explicit instructions of your prescribing physician and pharmacists.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    Text(
-                        text = "Privacy & Data Minimization: Your medication schedules and dose logs are shared only with invited members of your private family group. When you delete your account or leave a group, your local cache and associated cloud tokens are purged immediately. No health data is sold or shared with third-party advertisers.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    Icon(
+                        imageVector = if (showManufacturerSteps) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = colors.textSecondary,
+                        modifier = Modifier.size(20.dp)
                     )
                 }
-            }
 
-            Spacer(modifier = Modifier.height(24.dp))
+                AnimatedVisibility(visible = showManufacturerSteps) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 10.dp, start = 8.dp, end = 8.dp)
+                    ) {
+                        val steps = getManufacturerInstructions(manufacturer)
+                        steps.forEachIndexed { index, step ->
+                            Row(
+                                modifier = Modifier.padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Text(
+                                    text = "${index + 1}.",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = colors.textPrimary,
+                                    modifier = Modifier.width(24.dp)
+                                )
+                                Text(
+                                    text = step,
+                                    fontSize = 14.sp,
+                                    color = colors.textSecondary,
+                                    lineHeight = 20.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
 
 @Composable
-fun BrandGuideCard(
-    brandName: String,
-    isCurrentDevice: Boolean,
-    steps: List<String>
+private fun ReliabilityItem(
+    title: String,
+    isAllowed: Boolean,
+    onFix: () -> Unit
 ) {
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isCurrentDevice) PrimaryTeal.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface
-        ),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.PhoneAndroid,
-                    contentDescription = null,
-                    tint = if (isCurrentDevice) PrimaryTeal else DeepNavy
-                )
-                Text(
-                    text = brandName,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.secondary
-                )
-                if (isCurrentDevice) {
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = PrimaryTeal
-                    ) {
-                        Text(
-                            text = "Your Device",
-                            color = Color.White,
-                            style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
-                    }
-                }
-            }
+    val colors = TulsiTheme.colors
 
-            steps.forEachIndexed { index, step ->
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Text(
-                        text = "${index + 1}.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = PrimaryTeal
-                    )
-                    Text(
-                        text = step,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium,
+                color = colors.textPrimary
+            )
+            Spacer(modifier = Modifier.height(3.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .background(
+                            color = if (isAllowed) colors.statusTaken else colors.statusMissed,
+                            shape = CircleShape
+                        )
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = if (isAllowed) "Allowed" else "Needs attention",
+                    fontSize = 14.sp,
+                    color = if (isAllowed) colors.textSecondary else colors.statusMissed
+                )
             }
         }
+
+        if (!isAllowed) {
+            Spacer(modifier = Modifier.width(12.dp))
+            TulsiOutlinedButton(
+                text = "Allow",
+                onClick = onFix
+            )
+        }
+    }
+}
+
+private fun getManufacturerInstructions(manufacturer: String): List<String> {
+    val brand = manufacturer.lowercase()
+    return when {
+        brand.contains("xiaomi") || brand.contains("redmi") || brand.contains("poco") -> listOf(
+            "Open Security app > Manage apps > Tulsi > Enable 'Autostart'.",
+            "Under Battery Saver, select 'No restrictions'.",
+            "Lock Tulsi in the recent apps tray."
+        )
+        brand.contains("samsung") -> listOf(
+            "Open Settings > Apps > Tulsi > Battery > Select 'Unrestricted'.",
+            "Go to Settings > Device Care > Battery > Background usage limits > Add Tulsi to 'Never sleeping apps'."
+        )
+        brand.contains("oneplus") || brand.contains("oppo") || brand.contains("realme") -> listOf(
+            "Open Settings > Battery > More settings > Optimize battery use > Select 'Don't optimize' for Tulsi.",
+            "Enable 'Allow background activity' and 'Allow auto-launch'."
+        )
+        brand.contains("vivo") || brand.contains("iqoo") -> listOf(
+            "Open Settings > Battery > High background power consumption > Allow Tulsi.",
+            "Open Settings > Applications > Autostart > Enable for Tulsi."
+        )
+        brand.contains("huawei") || brand.contains("honor") -> listOf(
+            "Open Settings > Battery > App launch > Set Tulsi to 'Manage manually'.",
+            "Enable Auto-launch, Secondary launch, and Run in background."
+        )
+        else -> listOf(
+            "Open Settings > Apps > Tulsi > Battery > Choose 'Unrestricted'.",
+            "Ensure system alarms and notifications are permitted."
+        )
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Previews: Light, Dark, 1.5x Font Scale
+// -----------------------------------------------------------------------------
+
+@Preview(name = "Reliability - Light", showBackground = true)
+@Composable
+fun BatteryOptimizationScreenPreviewLight() {
+    TulsiTheme(darkTheme = false) {
+        BatteryOptimizationScreen(onNavigateBack = {})
+    }
+}
+
+@Preview(name = "Reliability - Dark", showBackground = true)
+@Composable
+fun BatteryOptimizationScreenPreviewDark() {
+    TulsiTheme(darkTheme = true) {
+        BatteryOptimizationScreen(onNavigateBack = {})
+    }
+}
+
+@Preview(name = "Reliability - 1.5x Font Scale", fontScale = 1.5f, showBackground = true)
+@Composable
+fun BatteryOptimizationScreenPreviewLargeFont() {
+    TulsiTheme(darkTheme = false) {
+        BatteryOptimizationScreen(onNavigateBack = {})
     }
 }

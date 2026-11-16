@@ -12,6 +12,8 @@ import com.tulsicare.app.core.data.repository.MedicineRepository
 import com.tulsicare.app.core.model.DoseEvent
 import com.tulsicare.app.core.model.DoseStatus
 import com.tulsicare.app.core.model.FamilyGroup
+import com.tulsicare.app.core.model.GroupMember
+import com.tulsicare.app.core.model.MemberRole
 import com.tulsicare.app.core.model.Medicine
 import com.tulsicare.app.core.model.User
 import com.tulsicare.app.core.preferences.UserPreferencesRepository
@@ -30,6 +32,9 @@ data class HomeUiState(
     val currentGroup: FamilyGroup? = null,
     val todayDoses: List<DoseEvent> = emptyList(),
     val medicines: List<Medicine> = emptyList(),
+    val members: List<GroupMember> = emptyList(),
+    val selectedMemberId: String? = null, // null means "Everyone"
+    val isAdmin: Boolean = false,
     val isSimpleMode: Boolean = false,
     val isLoading: Boolean = true
 )
@@ -65,6 +70,10 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    fun selectMember(memberId: String?) {
+        _uiState.update { it.copy(selectedMemberId = memberId) }
+    }
+
     private var loadDataJob: kotlinx.coroutines.Job? = null
 
     fun loadData() {
@@ -72,23 +81,16 @@ class HomeViewModel @Inject constructor(
         loadDataJob = viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
 
-            // Ensure user exists (sign in anonymously if not authenticated yet)
-            var user = authRepository.getCurrentUser()
-            if (user == null) {
-                user = authRepository.signInAnonymously().getOrNull()
-            }
+            val user = authRepository.getCurrentUser() ?: authRepository.signInAnonymously().getOrNull()
             _uiState.update { it.copy(currentUser = user) }
 
             val groupId = user?.currentGroupId.orEmpty().ifBlank { "my_family" }
 
-            // Load group
             val group = familyGroupRepository.getGroup(groupId)
             _uiState.update { it.copy(currentGroup = group) }
 
-            // Generate today's doses if needed
             doseEventRepository.generateTodayDosesIfMissing(groupId)
 
-            // Start observing today's doses & active medicines
             val calendar = Calendar.getInstance()
             calendar.set(Calendar.HOUR_OF_DAY, 0)
             calendar.set(Calendar.MINUTE, 0)
@@ -111,6 +113,15 @@ class HomeViewModel @Inject constructor(
                 medicineRepository.observeActiveMedicines(groupId)
                     .collectLatest { meds ->
                         _uiState.update { it.copy(medicines = meds, isLoading = false) }
+                    }
+            }
+
+            launch {
+                familyGroupRepository.observeMembers(groupId)
+                    .collectLatest { membersList ->
+                        val currentUid = user?.id.orEmpty()
+                        val admin = membersList.any { it.userId == currentUid && it.role == MemberRole.ADMIN }
+                        _uiState.update { it.copy(members = membersList, isAdmin = admin) }
                     }
             }
         }
@@ -138,7 +149,6 @@ class HomeViewModel @Inject constructor(
         val medName = firstMed?.name ?: "Metformin 500mg"
         val dosage = firstMed?.dosage ?: "1 tablet"
 
-        // 1. Launch AlarmActivity directly so the full screen with Taken/Snooze/Skip buttons is visible immediately
         val activityIntent = Intent(context, com.tulsicare.app.feature.alarm.AlarmActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra(AlarmReceiver.EXTRA_MEDICINE_ID, medId)
@@ -148,7 +158,6 @@ class HomeViewModel @Inject constructor(
         }
         context.startActivity(activityIntent)
 
-        // 2. Also start AlarmPlaybackService for sound and vibration
         val serviceIntent = Intent(context, com.tulsicare.app.core.alarm.AlarmPlaybackService::class.java).apply {
             putExtra(AlarmReceiver.EXTRA_MEDICINE_ID, medId)
             putExtra(AlarmReceiver.EXTRA_MEDICINE_NAME, medName)
