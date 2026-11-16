@@ -138,10 +138,10 @@ object ExactAlarmScheduler {
         }
     }
 
-    private fun computeNextTriggerTime(schedule: com.tulsicare.app.core.model.Schedule, now: Long): Long? {
-        val todayCal = Calendar.getInstance().apply { timeInMillis = now }
-        val calDayOfWeek = todayCal.get(Calendar.DAY_OF_WEEK)
-        val modelDayOfWeek = if (calDayOfWeek == Calendar.SUNDAY) 7 else calDayOfWeek - 1
+    fun computeNextTriggerTime(schedule: com.tulsicare.app.core.model.Schedule, now: Long): Long? {
+        if (!schedule.isActive) return null
+        if (schedule.endDate != null && schedule.endDate <= now) return null
+        if (schedule.type == ScheduleType.AS_NEEDED || schedule.timesOfDay.isEmpty()) return null
 
         val potentialTimes = mutableListOf<Long>()
 
@@ -151,39 +151,36 @@ object ExactAlarmScheduler {
             val hour = parts[0].toIntOrNull() ?: continue
             val minute = parts[1].toIntOrNull() ?: continue
 
-            // Try today
-            val todaySlot = Calendar.getInstance().apply {
-                timeInMillis = now
-                set(Calendar.HOUR_OF_DAY, hour)
-                set(Calendar.MINUTE, minute)
-                set(Calendar.SECOND, 0)
-                set(Calendar.MILLISECOND, 0)
-            }
-
-            val shouldFireToday = when (schedule.type) {
-                ScheduleType.DAILY -> true
-                ScheduleType.SPECIFIC_DAYS -> schedule.daysOfWeek.contains(modelDayOfWeek)
-                ScheduleType.INTERVAL -> true
-                ScheduleType.AS_NEEDED -> false
-            }
-
-            if (shouldFireToday && todaySlot.timeInMillis > now) {
-                potentialTimes.add(todaySlot.timeInMillis)
-            } else if (schedule.type != ScheduleType.AS_NEEDED) {
-                // Try tomorrow
-                val tomorrowSlot = Calendar.getInstance().apply {
-                    timeInMillis = todaySlot.timeInMillis + (24 * 60 * 60 * 1000L)
+            // Look ahead up to 7 days (dayOffset 0 = today, 1 = tomorrow ... 7)
+            for (dayOffset in 0..7) {
+                val slot = Calendar.getInstance().apply {
+                    timeInMillis = now
+                    add(Calendar.DAY_OF_YEAR, dayOffset)
+                    set(Calendar.HOUR_OF_DAY, hour)
+                    set(Calendar.MINUTE, minute)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
                 }
-                val tomorrowCalDay = tomorrowSlot.get(Calendar.DAY_OF_WEEK)
-                val tomorrowModelDay = if (tomorrowCalDay == Calendar.SUNDAY) 7 else tomorrowCalDay - 1
-                val shouldFireTomorrow = when (schedule.type) {
-                    ScheduleType.DAILY -> true
-                    ScheduleType.SPECIFIC_DAYS -> schedule.daysOfWeek.contains(tomorrowModelDay)
-                    ScheduleType.INTERVAL -> true
+
+                val slotMillis = slot.timeInMillis
+                if (slotMillis <= now) continue
+
+                // Verify schedule start/end bounds
+                if (schedule.startDate > slotMillis) continue
+                if (schedule.endDate != null && slotMillis > schedule.endDate) continue
+
+                val calDayOfWeek = slot.get(Calendar.DAY_OF_WEEK)
+                val modelDayOfWeek = if (calDayOfWeek == Calendar.SUNDAY) 7 else calDayOfWeek - 1
+
+                val shouldFire = when (schedule.type) {
+                    ScheduleType.DAILY, ScheduleType.INTERVAL -> true
+                    ScheduleType.SPECIFIC_DAYS -> schedule.daysOfWeek.contains(modelDayOfWeek)
                     ScheduleType.AS_NEEDED -> false
                 }
-                if (shouldFireTomorrow) {
-                    potentialTimes.add(tomorrowSlot.timeInMillis)
+
+                if (shouldFire) {
+                    potentialTimes.add(slotMillis)
+                    break // Found earliest upcoming slot for this timeOfDay
                 }
             }
         }

@@ -12,6 +12,7 @@ interface FamilyGroupRepository {
     suspend fun createGroup(name: String, creatorUser: User): Result<FamilyGroup>
     suspend fun joinGroupByCode(inviteCode: String, user: User): Result<FamilyGroup>
     suspend fun leaveGroup(groupId: String, userId: String): Result<Unit>
+    suspend fun removeMember(groupId: String, targetUserId: String): Result<Unit>
     fun syncGroupRealtime(groupId: String): Flow<FamilyGroup?>
     fun syncMembersRealtime(groupId: String): Flow<List<GroupMember>>
 }

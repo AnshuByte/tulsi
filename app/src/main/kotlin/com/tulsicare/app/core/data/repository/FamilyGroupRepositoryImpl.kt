@@ -1,6 +1,9 @@
 ﻿package com.tulsicare.app.core.data.repository
 
+import com.tulsicare.app.core.database.dao.DoseEventDao
 import com.tulsicare.app.core.database.dao.FamilyGroupDao
+import com.tulsicare.app.core.database.dao.MedicineDao
+import com.tulsicare.app.core.database.dao.ScheduleDao
 import com.tulsicare.app.core.database.entity.toEntity
 import com.tulsicare.app.core.model.FamilyGroup
 import com.tulsicare.app.core.model.GroupMember
@@ -22,6 +25,9 @@ import kotlin.random.Random
 @Singleton
 class FamilyGroupRepositoryImpl @Inject constructor(
     private val familyGroupDao: FamilyGroupDao,
+    private val medicineDao: MedicineDao,
+    private val scheduleDao: ScheduleDao,
+    private val doseEventDao: DoseEventDao,
     private val firestore: FirebaseFirestore
 ) : FamilyGroupRepository {
 
@@ -83,6 +89,10 @@ class FamilyGroupRepositoryImpl @Inject constructor(
 
     override suspend fun joinGroupByCode(inviteCode: String, user: User): Result<FamilyGroup> = runCatching {
         val cleanCode = inviteCode.trim().uppercase()
+        require(cleanCode.isNotBlank()) { "Invite code cannot be empty" }
+        require(cleanCode.length == 6) { "Invite code must be exactly 6 characters" }
+        require(cleanCode.all { it.isLetterOrDigit() }) { "Invite code contains invalid characters" }
+
         val querySnapshot = firestore.collection("groups")
             .whereEqualTo("inviteCode", cleanCode)
             .limit(1)
@@ -126,6 +136,34 @@ class FamilyGroupRepositoryImpl @Inject constructor(
     }
 
     override suspend fun leaveGroup(groupId: String, userId: String): Result<Unit> = runCatching {
+        // Prevent orphaned groups: inspect current members
+        val memberDocs = firestore.collection("groups")
+            .document(groupId)
+            .collection("members")
+            .get()
+            .await()
+
+        val leavingDoc = memberDocs.documents.find { it.id == userId }
+        val isLeavingAdmin = leavingDoc?.getString("role")?.uppercase() == "ADMIN"
+        val remainingDocs = memberDocs.documents.filter { it.id != userId }
+
+        if (remainingDocs.isEmpty()) {
+            // Last member leaving: cleanup group
+            firestore.collection("groups").document(groupId).delete().await()
+        } else if (isLeavingAdmin) {
+            val hasOtherAdmin = remainingDocs.any { it.getString("role")?.uppercase() == "ADMIN" }
+            if (!hasOtherAdmin) {
+                // Promote next member to ADMIN to ensure group is never orphaned
+                val nextAdminId = remainingDocs.first().id
+                firestore.collection("groups")
+                    .document(groupId)
+                    .collection("members")
+                    .document(nextAdminId)
+                    .update("role", "ADMIN")
+                    .await()
+            }
+        }
+
         firestore.collection("groups")
             .document(groupId)
             .collection("members")
@@ -137,7 +175,28 @@ class FamilyGroupRepositoryImpl @Inject constructor(
             .set(mapOf("currentGroupId" to null), SetOptions.merge())
             .await()
 
+        // Immediately purge local caches for this group to prevent data persistence
         familyGroupDao.deleteMember(userId, groupId)
+        familyGroupDao.deleteGroup(groupId)
+        familyGroupDao.clearMembers(groupId)
+        medicineDao.clearMedicinesForGroup(groupId)
+        scheduleDao.clearSchedulesForGroup(groupId)
+        doseEventDao.clearEventsForGroup(groupId)
+    }
+
+    override suspend fun removeMember(groupId: String, targetUserId: String): Result<Unit> = runCatching {
+        firestore.collection("groups")
+            .document(groupId)
+            .collection("members")
+            .document(targetUserId)
+            .delete()
+            .await()
+
+        firestore.collection("users").document(targetUserId)
+            .set(mapOf("currentGroupId" to null), SetOptions.merge())
+            .await()
+
+        familyGroupDao.deleteMember(targetUserId, groupId)
     }
 
     override fun syncGroupRealtime(groupId: String): Flow<FamilyGroup?> = callbackFlow {

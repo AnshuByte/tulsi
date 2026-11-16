@@ -72,6 +72,7 @@ class ScheduleRepositoryImpl @Inject constructor(
             .await()
 
         scheduleDao.updateSchedule(schedule.toEntity())
+        ExactAlarmScheduler.cancelAlarm(context, schedule.id)
         ExactAlarmScheduler.rescheduleAll(context)
         pushRelayClient.relayScheduleSync(schedule.groupId)
     }
