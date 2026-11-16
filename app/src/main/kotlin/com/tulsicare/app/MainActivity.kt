@@ -4,12 +4,16 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -65,7 +69,22 @@ fun TulsiNavigation() {
     val homeState by homeViewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
-    val startDestination = if (authState.currentUser != null) "home" else "auth"
+    val currentUser = authState.currentUser
+    val startDestination = if (currentUser != null) "home" else "auth"
+
+    // Single source of truth for auth state:
+    // If user is null -> Login (clear the back stack), always, regardless of group state.
+    LaunchedEffect(currentUser) {
+        if (currentUser == null) {
+            val destination = navController.currentDestination?.route
+            if (destination != null && destination != "auth") {
+                navController.navigate("auth") {
+                    popUpTo(0) { inclusive = true }
+                    launchSingleTop = true
+                }
+            }
+        }
+    }
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: startDestination
@@ -94,7 +113,14 @@ fun TulsiNavigation() {
         NavHost(
             navController = navController,
             startDestination = startDestination,
-            modifier = Modifier.padding(innerPadding)
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .consumeWindowInsets(innerPadding),
+            enterTransition = { EnterTransition.None },
+            exitTransition = { ExitTransition.None },
+            popEnterTransition = { EnterTransition.None },
+            popExitTransition = { ExitTransition.None }
         ) {
             composable("auth") {
                 AuthScreen(
@@ -144,7 +170,9 @@ fun TulsiNavigation() {
                 SettingsScreen(
                     currentUser = authState.currentUser ?: homeState.currentUser,
                     isSimpleMode = homeState.isSimpleMode,
+                    preReminderLeadMinutes = homeState.preReminderLeadMinutes,
                     onToggleSimpleMode = homeViewModel::toggleSimpleMode,
+                    onSetPreReminderLeadMinutes = homeViewModel::setPreReminderLeadMinutes,
                     onNavigateToReliability = {
                         navController.navigate("reliability")
                     },
@@ -155,6 +183,7 @@ fun TulsiNavigation() {
                         authViewModel.signOut()
                         navController.navigate("auth") {
                             popUpTo(0) { inclusive = true }
+                            launchSingleTop = true
                         }
                     }
                 )

@@ -32,6 +32,9 @@ interface MedicineDao {
     @Query("SELECT * FROM medicines WHERE (groupId = :groupId OR groupId IN ('my_family', 'default_group')) AND isActive = 1")
     suspend fun getActiveMedicines(groupId: String): List<MedicineEntity>
 
+    @Query("SELECT * FROM medicines WHERE isActive = 1")
+    suspend fun getAllActiveMedicines(): List<MedicineEntity>
+
     @Query("UPDATE medicines SET groupId = :targetGroupId WHERE groupId IN (:sourceGroupIds)")
     suspend fun reassignGroup(sourceGroupIds: List<String>, targetGroupId: String)
 

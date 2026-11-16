@@ -1,5 +1,13 @@
 package com.tulsicare.app.core.data.repository
 
+import android.content.Context
+import android.util.Log
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
+import com.google.firebase.firestore.SetOptions
+import com.tulsicare.app.core.alarm.ExactAlarmScheduler
+import com.tulsicare.app.core.data.sync.FirestoreListenerManager
 import com.tulsicare.app.core.database.dao.DoseEventDao
 import com.tulsicare.app.core.database.dao.FamilyGroupDao
 import com.tulsicare.app.core.database.dao.MedicineDao
@@ -9,8 +17,8 @@ import com.tulsicare.app.core.model.FamilyGroup
 import com.tulsicare.app.core.model.GroupMember
 import com.tulsicare.app.core.model.MemberRole
 import com.tulsicare.app.core.model.User
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.SetOptions
+import com.tulsicare.app.core.preferences.UserPreferencesRepository
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -24,11 +32,15 @@ import kotlin.random.Random
 
 @Singleton
 class FamilyGroupRepositoryImpl @Inject constructor(
+    @ApplicationContext private val context: Context,
+    private val auth: FirebaseAuth,
     private val familyGroupDao: FamilyGroupDao,
     private val medicineDao: MedicineDao,
     private val scheduleDao: ScheduleDao,
     private val doseEventDao: DoseEventDao,
-    private val firestore: FirebaseFirestore
+    private val firestore: FirebaseFirestore,
+    private val firestoreListenerManager: FirestoreListenerManager,
+    private val userPreferencesRepository: UserPreferencesRepository
 ) : FamilyGroupRepository {
 
     override fun observeGroup(groupId: String): Flow<FamilyGroup?> {
@@ -76,7 +88,7 @@ class FamilyGroupRepositoryImpl @Inject constructor(
             .await()
 
         // 3. Write invite code resolution doc for secure joining
-        runCatching {
+        try {
             firestore.collection("inviteCodes").document(inviteCode).set(
                 mapOf(
                     "code" to inviteCode,
@@ -86,12 +98,15 @@ class FamilyGroupRepositoryImpl @Inject constructor(
                     "createdAt" to System.currentTimeMillis()
                 )
             ).await()
+        } catch (e: Exception) {
+            Log.w("FamilyGroupRepo", "Failed to write inviteCodes document: ${e.message}")
         }
 
         // 4. Update creator's currentGroupId in users collection
         firestore.collection("users").document(creatorUser.id)
             .set(mapOf("currentGroupId" to groupId), SetOptions.merge())
             .await()
+        userPreferencesRepository.setCurrentGroupId(groupId)
 
         // 5. Cache in Room
         familyGroupDao.insertGroup(group.toEntity())
@@ -111,24 +126,42 @@ class FamilyGroupRepositoryImpl @Inject constructor(
         require(cleanCode.length == 6) { "Invite code must be 6 characters" }
         require(cleanCode.all { it.isLetterOrDigit() }) { "Invite code must contain letters and numbers only" }
 
-        // 1. Single document lookup via /inviteCodes/{code}
-        val inviteDoc = try {
-            firestore.collection("inviteCodes").document(cleanCode).get().await()
+        // 1. Resolve invite code to target groupId
+        var targetGroupId: String? = null
+        try {
+            val inviteDoc = firestore.collection("inviteCodes").document(cleanCode).get().await()
+            if (inviteDoc.exists()) {
+                val expiresAt = inviteDoc.getLong("expiresAt")
+                if (expiresAt != null && expiresAt > 0 && expiresAt < System.currentTimeMillis()) {
+                    throw IllegalArgumentException("This invite code has expired. Please ask your family admin for a new one.")
+                }
+                targetGroupId = inviteDoc.getString("groupId")
+            }
+        } catch (e: IllegalArgumentException) {
+            throw e
         } catch (e: Exception) {
-            throw IllegalArgumentException("Unable to verify invite code. Please check your internet connection.")
+            Log.w("FamilyGroupRepo", "inviteCodes lookup failed for $cleanCode: ${e.message}")
         }
 
-        if (!inviteDoc.exists()) {
-            throw IllegalArgumentException("Invite code not found. Please verify the code with your family admin.")
+        // Fallback: If not found in inviteCodes, query groups directly by inviteCode
+        if (targetGroupId.isNullOrBlank()) {
+            try {
+                val groupQuery = firestore.collection("groups")
+                    .whereEqualTo("inviteCode", cleanCode)
+                    .limit(1)
+                    .get()
+                    .await()
+                if (!groupQuery.isEmpty) {
+                    targetGroupId = groupQuery.documents.first().id
+                }
+            } catch (e: Exception) {
+                Log.w("FamilyGroupRepo", "groups query fallback failed for $cleanCode: ${e.message}")
+            }
         }
 
-        val expiresAt = inviteDoc.getLong("expiresAt")
-        if (expiresAt != null && expiresAt > 0 && expiresAt < System.currentTimeMillis()) {
-            throw IllegalArgumentException("This invite code has expired. Please ask your family admin for a new one.")
+        if (targetGroupId.isNullOrBlank()) {
+            throw IllegalArgumentException("Invite code '$cleanCode' not found. Please verify the code with your family admin.")
         }
-
-        val targetGroupId = inviteDoc.getString("groupId")
-            ?: throw IllegalArgumentException("Invalid invite code configuration.")
 
         // 2. Add user as member with role MEMBER
         val member = GroupMember(
@@ -148,7 +181,13 @@ class FamilyGroupRepositoryImpl @Inject constructor(
                 .set(member)
                 .await()
         } catch (e: Exception) {
-            throw IllegalStateException("Unable to join family group. Please check your permissions.")
+            Log.e("FamilyGroupRepo", "Failed to join group $targetGroupId", e)
+            throw IllegalStateException(
+                if (e is FirebaseFirestoreException && e.code == FirebaseFirestoreException.Code.PERMISSION_DENIED)
+                    "Permission denied when joining family circle."
+                else
+                    "Unable to join family group: ${e.localizedMessage ?: "Unknown error"}"
+            )
         }
 
         // 3. Now that membership is recorded, retrieve group details
@@ -160,6 +199,7 @@ class FamilyGroupRepositoryImpl @Inject constructor(
         firestore.collection("users").document(user.id)
             .set(mapOf("currentGroupId" to group.id), SetOptions.merge())
             .await()
+        userPreferencesRepository.setCurrentGroupId(group.id)
 
         // 5. Cache in Room DB
         familyGroupDao.insertGroup(group.toEntity())
@@ -171,6 +211,71 @@ class FamilyGroupRepositoryImpl @Inject constructor(
         doseEventDao.reassignGroup(listOf("default_group", "my_family"), group.id)
 
         group
+    }
+
+    override suspend fun deleteGroup(groupId: String): Result<Unit> = runCatching {
+        val currentUid = auth.currentUser?.uid ?: throw IllegalStateException("Not authenticated")
+
+        // 1. Verify admin role
+        val memberDoc = firestore.collection("groups")
+            .document(groupId)
+            .collection("members")
+            .document(currentUid)
+            .get()
+            .await()
+        val role = memberDoc.getString("role")?.uppercase()
+        require(role == "ADMIN") { "Only a family admin can delete the family" }
+
+        // 2. Fetch group doc for inviteCode
+        val groupDoc = firestore.collection("groups").document(groupId).get().await()
+        val inviteCode = groupDoc.getString("inviteCode")
+
+        // 3. Fetch all members and subcollections
+        val memberDocs = firestore.collection("groups").document(groupId).collection("members").get().await()
+        val medicineDocs = firestore.collection("groups").document(groupId).collection("medicines").get().await()
+        val scheduleDocs = firestore.collection("groups").document(groupId).collection("schedules").get().await()
+        val doseEventDocs = firestore.collection("groups").document(groupId).collection("doseEvents").get().await()
+
+        // 4. Atomic batch deletion in Firestore
+        val batch = firestore.batch()
+        batch.delete(firestore.collection("groups").document(groupId))
+
+        if (!inviteCode.isNullOrBlank()) {
+            batch.delete(firestore.collection("inviteCodes").document(inviteCode))
+        }
+
+        for (doc in memberDocs.documents) {
+            batch.delete(doc.reference)
+        }
+        for (doc in medicineDocs.documents) {
+            batch.delete(doc.reference)
+        }
+        for (doc in scheduleDocs.documents) {
+            batch.delete(doc.reference)
+        }
+        for (doc in doseEventDocs.documents) {
+            batch.delete(doc.reference)
+        }
+
+        // Reset current user's currentGroupId in user doc
+        batch.set(
+            firestore.collection("users").document(currentUid),
+            mapOf("currentGroupId" to null),
+            SetOptions.merge()
+        )
+
+        batch.commit().await()
+
+        // 5. Cleanup listeners, alarms, and local cache
+        firestoreListenerManager.removeListenersForGroup(groupId)
+        runCatching { ExactAlarmScheduler.cancelAlarmsForGroup(context, groupId) }
+
+        familyGroupDao.deleteGroup(groupId)
+        familyGroupDao.clearMembers(groupId)
+        medicineDao.clearMedicinesForGroup(groupId)
+        scheduleDao.clearSchedulesForGroup(groupId)
+        doseEventDao.clearEventsForGroup(groupId)
+        userPreferencesRepository.clearGroupId()
     }
 
     override suspend fun leaveGroup(groupId: String, userId: String): Result<Unit> = runCatching {
@@ -186,32 +291,51 @@ class FamilyGroupRepositoryImpl @Inject constructor(
         val remainingDocs = memberDocs.documents.filter { it.id != userId }
 
         if (remainingDocs.isEmpty()) {
-            // Last member leaving: cleanup group
-            firestore.collection("groups").document(groupId).delete().await()
-        } else if (isLeavingAdmin) {
+            // Sole member leaving: completely delete group atomically
+            deleteGroup(groupId).getOrThrow()
+            return@runCatching
+        }
+
+        val batch = firestore.batch()
+
+        // 1. If only admin leaving, promote next member in the same batch
+        if (isLeavingAdmin) {
             val hasOtherAdmin = remainingDocs.any { it.getString("role")?.uppercase() == "ADMIN" }
             if (!hasOtherAdmin) {
-                // Promote next member to ADMIN to ensure group is never orphaned
                 val nextAdminId = remainingDocs.first().id
-                firestore.collection("groups")
-                    .document(groupId)
-                    .collection("members")
-                    .document(nextAdminId)
-                    .update("role", "ADMIN")
-                    .await()
+                batch.update(
+                    firestore.collection("groups")
+                        .document(groupId)
+                        .collection("members")
+                        .document(nextAdminId),
+                    "role", "ADMIN"
+                )
             }
         }
 
-        firestore.collection("groups")
-            .document(groupId)
-            .collection("members")
-            .document(userId)
-            .delete()
-            .await()
+        // 2. Remove member document in the batch
+        batch.delete(
+            firestore.collection("groups")
+                .document(groupId)
+                .collection("members")
+                .document(userId)
+        )
 
-        firestore.collection("users").document(userId)
-            .set(mapOf("currentGroupId" to null), SetOptions.merge())
-            .await()
+        // 3. Clear currentGroupId on user document in the same batch
+        batch.set(
+            firestore.collection("users").document(userId),
+            mapOf("currentGroupId" to null),
+            SetOptions.merge()
+        )
+
+        batch.commit().await()
+
+        // 4. Local cleanup:
+        // Detach every listener for the old groupId
+        firestoreListenerManager.removeListenersForGroup(groupId)
+
+        // Cancel local alarms for that group's medicines
+        runCatching { ExactAlarmScheduler.cancelAlarmsForGroup(context, groupId) }
 
         // Immediately purge local caches for this group to prevent data persistence
         familyGroupDao.deleteMember(userId, groupId)
@@ -220,6 +344,9 @@ class FamilyGroupRepositoryImpl @Inject constructor(
         medicineDao.clearMedicinesForGroup(groupId)
         scheduleDao.clearSchedulesForGroup(groupId)
         doseEventDao.clearEventsForGroup(groupId)
+
+        // Clear groupId from DataStore
+        userPreferencesRepository.clearGroupId()
     }
 
     override suspend fun removeMember(groupId: String, targetUserId: String): Result<Unit> = runCatching {
@@ -238,14 +365,51 @@ class FamilyGroupRepositoryImpl @Inject constructor(
     }
 
     override fun syncGroupRealtime(groupId: String): Flow<FamilyGroup?> = callbackFlow {
+        val currentUid = auth.currentUser?.uid.orEmpty()
         val registration = firestore.collection("groups")
             .document(groupId)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    close(error)
+                    val isNotFoundOrDenied = error.code == FirebaseFirestoreException.Code.NOT_FOUND ||
+                            error.code == FirebaseFirestoreException.Code.PERMISSION_DENIED
+                    if (isNotFoundOrDenied) {
+                        firestoreListenerManager.removeListenersForGroup(groupId)
+                        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                            familyGroupDao.deleteGroup(groupId)
+                            familyGroupDao.clearMembers(groupId)
+                            medicineDao.clearMedicinesForGroup(groupId)
+                            scheduleDao.clearSchedulesForGroup(groupId)
+                            doseEventDao.clearEventsForGroup(groupId)
+                            ExactAlarmScheduler.cancelAlarmsForGroup(context, groupId)
+                            if (currentUid.isNotBlank()) {
+                                firestore.collection("users").document(currentUid)
+                                    .set(mapOf("currentGroupId" to null), SetOptions.merge())
+                            }
+                        }
+                        trySend(null)
+                    }
                     return@addSnapshotListener
                 }
-                val group = snapshot?.toObject(FamilyGroup::class.java)?.copy(id = snapshot.id)
+
+                if (snapshot == null || !snapshot.exists()) {
+                    firestoreListenerManager.removeListenersForGroup(groupId)
+                    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                        familyGroupDao.deleteGroup(groupId)
+                        familyGroupDao.clearMembers(groupId)
+                        medicineDao.clearMedicinesForGroup(groupId)
+                        scheduleDao.clearSchedulesForGroup(groupId)
+                        doseEventDao.clearEventsForGroup(groupId)
+                        ExactAlarmScheduler.cancelAlarmsForGroup(context, groupId)
+                        if (currentUid.isNotBlank()) {
+                            firestore.collection("users").document(currentUid)
+                                .set(mapOf("currentGroupId" to null), SetOptions.merge())
+                        }
+                    }
+                    trySend(null)
+                    return@addSnapshotListener
+                }
+
+                val group = snapshot.toObject(FamilyGroup::class.java)?.copy(id = snapshot.id)
                 if (group != null) {
                     kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
                         familyGroupDao.insertGroup(group.toEntity())
@@ -254,16 +418,30 @@ class FamilyGroupRepositoryImpl @Inject constructor(
                 trySend(group)
             }
 
-        awaitClose { registration.remove() }
+        if (currentUid.isNotBlank()) {
+            firestoreListenerManager.register(currentUid, groupId, "group", registration)
+        }
+
+        awaitClose {
+            if (currentUid.isNotBlank()) {
+                firestoreListenerManager.removeListener(currentUid, groupId, "group")
+            }
+            registration.remove()
+        }
     }
 
     override fun syncMembersRealtime(groupId: String): Flow<List<GroupMember>> = callbackFlow {
+        val currentUid = auth.currentUser?.uid.orEmpty()
         val registration = firestore.collection("groups")
             .document(groupId)
             .collection("members")
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    close(error)
+                    val isNotFoundOrDenied = error.code == FirebaseFirestoreException.Code.NOT_FOUND ||
+                            error.code == FirebaseFirestoreException.Code.PERMISSION_DENIED
+                    if (isNotFoundOrDenied) {
+                        trySend(emptyList())
+                    }
                     return@addSnapshotListener
                 }
                 val members = snapshot?.documents?.mapNotNull { doc ->
@@ -279,7 +457,16 @@ class FamilyGroupRepositoryImpl @Inject constructor(
                 trySend(members)
             }
 
-        awaitClose { registration.remove() }
+        if (currentUid.isNotBlank()) {
+            firestoreListenerManager.register(currentUid, groupId, "members", registration)
+        }
+
+        awaitClose {
+            if (currentUid.isNotBlank()) {
+                firestoreListenerManager.removeListener(currentUid, groupId, "members")
+            }
+            registration.remove()
+        }
     }
 
     private fun generateInviteCode(): String {

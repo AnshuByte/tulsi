@@ -21,7 +21,7 @@ class TulsiApp : Application() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val notificationManager = getSystemService<NotificationManager>() ?: return
 
-            // Channel 1: Urgent Medicine Reminders (Full-screen alarm, rings in DND/silent)
+            // Channel 1: Dose alarm (Full-screen alarm sound, high importance, bypass DND)
             val alarmSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
                 ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
 
@@ -31,11 +31,11 @@ class TulsiApp : Application() {
                 .build()
 
             val alarmChannel = NotificationChannel(
-                CHANNEL_ID_MEDICINE_ALARM,
-                "Tulsi Medicine Reminders",
+                CHANNEL_ID_DOSE_ALARM,
+                "Dose alarm",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "Loud, gentle reminders when it is time to take medicine"
+                description = "Loud, gentle alarm when your medicine is due"
                 enableVibration(true)
                 vibrationPattern = longArrayOf(0, 500, 200, 500, 200, 500)
                 setSound(alarmSoundUri, audioAttributes)
@@ -43,7 +43,18 @@ class TulsiApp : Application() {
                 lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
             }
 
-            // Channel 2: Family Escalation & Heads-up alerts
+            // Channel 2: Upcoming dose (Pre-reminder, default importance, no sound loop)
+            val upcomingChannel = NotificationChannel(
+                CHANNEL_ID_UPCOMING_DOSE,
+                "Upcoming dose",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Gentle pre-reminder before your dose is due"
+                enableVibration(true)
+                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+            }
+
+            // Channel 3: Family Escalation & Heads-up alerts
             val escalationChannel = NotificationChannel(
                 CHANNEL_ID_FAMILY_ESCALATION,
                 "Tulsi Family Updates",
@@ -54,7 +65,7 @@ class TulsiApp : Application() {
                 lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
             }
 
-            // Channel 3: Background sync and general updates
+            // Channel 4: Background sync and general updates
             val syncChannel = NotificationChannel(
                 CHANNEL_ID_SYNC,
                 "Tulsi Sync & Updates",
@@ -64,13 +75,15 @@ class TulsiApp : Application() {
             }
 
             notificationManager.createNotificationChannels(
-                listOf(alarmChannel, escalationChannel, syncChannel)
+                listOf(alarmChannel, upcomingChannel, escalationChannel, syncChannel)
             )
         }
     }
 
     companion object {
-        const val CHANNEL_ID_MEDICINE_ALARM = "tulsi_medicine_alarm"
+        const val CHANNEL_ID_DOSE_ALARM = "tulsi_dose_alarm"
+        const val CHANNEL_ID_MEDICINE_ALARM = "tulsi_dose_alarm" // Backwards compatibility alias
+        const val CHANNEL_ID_UPCOMING_DOSE = "tulsi_upcoming_dose"
         const val CHANNEL_ID_FAMILY_ESCALATION = "tulsi_family_escalation"
         const val CHANNEL_ID_SYNC = "tulsi_sync"
     }

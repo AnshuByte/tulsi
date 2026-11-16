@@ -1,9 +1,15 @@
 package com.tulsicare.app.core.data.repository
 
+import android.content.Context
+import com.tulsicare.app.core.alarm.ExactAlarmScheduler
 import com.tulsicare.app.core.database.dao.MedicineDao
 import com.tulsicare.app.core.database.entity.toEntity
 import com.tulsicare.app.core.model.Medicine
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
+import com.tulsicare.app.core.data.sync.FirestoreListenerManager
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -16,8 +22,11 @@ import javax.inject.Singleton
 
 @Singleton
 class MedicineRepositoryImpl @Inject constructor(
+    @ApplicationContext private val context: Context,
+    private val auth: FirebaseAuth,
     private val medicineDao: MedicineDao,
-    private val firestore: FirebaseFirestore
+    private val firestore: FirebaseFirestore,
+    private val firestoreListenerManager: FirestoreListenerManager
 ) : MedicineRepository {
 
     override fun observeActiveMedicines(groupId: String): Flow<List<Medicine>> {
@@ -42,8 +51,8 @@ class MedicineRepositoryImpl @Inject constructor(
         // Cache in Room immediately for instant local UI display
         medicineDao.insertMedicine(toSave.toEntity())
 
-        // Sync to Firestore in background
-        runCatching {
+        // Confirm written to Firestore before returning
+        if (toSave.groupId.isNotBlank()) {
             firestore.collection("groups")
                 .document(toSave.groupId)
                 .collection("medicines")
@@ -59,7 +68,7 @@ class MedicineRepositoryImpl @Inject constructor(
         val updated = medicine.copy(updatedAt = System.currentTimeMillis())
         medicineDao.updateMedicine(updated.toEntity())
 
-        runCatching {
+        if (updated.groupId.isNotBlank()) {
             firestore.collection("groups")
                 .document(updated.groupId)
                 .collection("medicines")
@@ -70,25 +79,34 @@ class MedicineRepositoryImpl @Inject constructor(
     }
 
     override suspend fun deleteMedicine(groupId: String, medicineId: String): Result<Unit> = runCatching {
-        // Soft delete in Firestore (set isActive = false) or hard delete
-        firestore.collection("groups")
-            .document(groupId)
-            .collection("medicines")
-            .document(medicineId)
-            .update("isActive", false)
-            .await()
+        // Cancel all alarms, pre-reminders, snoozes via registry
+        ExactAlarmScheduler.cancelAlarmsForMedicine(context, medicineId)
+
+        if (groupId.isNotBlank()) {
+            firestore.collection("groups")
+                .document(groupId)
+                .collection("medicines")
+                .document(medicineId)
+                .update("isActive", false)
+                .await()
+        }
 
         medicineDao.deleteMedicineById(medicineId)
     }
 
     override fun syncMedicinesRealtime(groupId: String): Flow<List<Medicine>> = callbackFlow {
+        val currentUid = auth.currentUser?.uid.orEmpty()
         val registration = firestore.collection("groups")
             .document(groupId)
             .collection("medicines")
             .whereEqualTo("isActive", true)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    close(error)
+                    val isNotFoundOrDenied = error.code == FirebaseFirestoreException.Code.NOT_FOUND ||
+                            error.code == FirebaseFirestoreException.Code.PERMISSION_DENIED
+                    if (isNotFoundOrDenied) {
+                        trySend(emptyList())
+                    }
                     return@addSnapshotListener
                 }
 
@@ -105,6 +123,15 @@ class MedicineRepositoryImpl @Inject constructor(
                 trySend(medicines)
             }
 
-        awaitClose { registration.remove() }
+        if (currentUid.isNotBlank()) {
+            firestoreListenerManager.register(currentUid, groupId, "medicines", registration)
+        }
+
+        awaitClose {
+            if (currentUid.isNotBlank()) {
+                firestoreListenerManager.removeListener(currentUid, groupId, "medicines")
+            }
+            registration.remove()
+        }
     }
 }

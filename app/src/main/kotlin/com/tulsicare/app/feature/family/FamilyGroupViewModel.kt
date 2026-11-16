@@ -1,4 +1,4 @@
-﻿package com.tulsicare.app.feature.family
+package com.tulsicare.app.feature.family
 
 import android.content.Context
 import android.content.Intent
@@ -30,7 +30,8 @@ data class FamilyGroupUiState(
     val successMessage: String? = null,
     val showCreateDialog: Boolean = false,
     val showJoinDialog: Boolean = false,
-    val showLeaveDialog: Boolean = false
+    val showLeaveDialog: Boolean = false,
+    val showDeleteDialog: Boolean = false
 )
 
 @HiltViewModel
@@ -42,19 +43,43 @@ class FamilyGroupViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(FamilyGroupUiState())
     val uiState: StateFlow<FamilyGroupUiState> = _uiState.asStateFlow()
 
+    private var loadDataJob: kotlinx.coroutines.Job? = null
+
     init {
-        loadData()
+        viewModelScope.launch {
+            authRepository.currentUser.collectLatest { user ->
+                if (user == null) {
+                    loadDataJob?.cancel()
+                    _uiState.update {
+                        it.copy(
+                            currentUser = null,
+                            group = null,
+                            members = emptyList(),
+                            isAdmin = false,
+                            isLoading = false
+                        )
+                    }
+                } else {
+                    loadData()
+                }
+            }
+        }
     }
 
     fun loadData() {
-        viewModelScope.launch {
+        loadDataJob?.cancel()
+        loadDataJob = viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            val user = authRepository.getCurrentUser() ?: authRepository.signInAnonymously().getOrNull()
+            val user = authRepository.getCurrentUser()
+            if (user == null) {
+                _uiState.update { it.copy(currentUser = null, group = null, members = emptyList(), isAdmin = false, isLoading = false) }
+                return@launch
+            }
             _uiState.update { it.copy(currentUser = user) }
 
-            val groupId = user?.currentGroupId
+            val groupId = user.currentGroupId
             if (groupId.isNullOrBlank()) {
-                _uiState.update { it.copy(isLoading = false, group = null, members = emptyList()) }
+                _uiState.update { it.copy(isLoading = false, group = null, members = emptyList(), isAdmin = false) }
                 return@launch
             }
 
@@ -95,6 +120,7 @@ class FamilyGroupViewModel @Inject constructor(
     fun setShowCreateDialog(show: Boolean) = _uiState.update { it.copy(showCreateDialog = show, errorMessage = null) }
     fun setShowJoinDialog(show: Boolean) = _uiState.update { it.copy(showJoinDialog = show, errorMessage = null) }
     fun setShowLeaveDialog(show: Boolean) = _uiState.update { it.copy(showLeaveDialog = show) }
+    fun setShowDeleteDialog(show: Boolean) = _uiState.update { it.copy(showDeleteDialog = show) }
     fun clearMessages() = _uiState.update { it.copy(errorMessage = null, successMessage = null) }
 
     fun createGroup(name: String) {
@@ -184,6 +210,38 @@ class FamilyGroupViewModel @Inject constructor(
                         it.copy(
                             isLoading = false,
                             errorMessage = error.localizedMessage ?: "Failed to leave group"
+                        )
+                    }
+                }
+        }
+    }
+
+    fun deleteGroup() {
+        val group = _uiState.value.group ?: return
+        if (!_uiState.value.isAdmin) {
+            _uiState.update { it.copy(errorMessage = "Only an admin can delete the family group") }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, showDeleteDialog = false) }
+            familyGroupRepository.deleteGroup(group.id)
+                .onSuccess {
+                    _uiState.update {
+                        it.copy(
+                            group = null,
+                            members = emptyList(),
+                            isAdmin = false,
+                            isLoading = false,
+                            successMessage = "Family group '${group.name}' was deleted"
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            errorMessage = error.localizedMessage ?: "Failed to delete family group"
                         )
                     }
                 }

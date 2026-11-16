@@ -81,22 +81,19 @@ fun HistoryScreenContent(
     // Group events by date (e.g. "Monday, Nov 16")
     val groupedEvents = groupEventsByDate(uiState.events)
 
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        containerColor = colors.background
-    ) { innerPadding ->
+    Box(
+        modifier = modifier.fillMaxSize().background(colors.background)
+    ) {
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(bottom = 88.dp)
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 20.dp)
         ) {
             // Screen Title
             item(key = "title_section") {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = TulsiScreenPadding, vertical = 20.dp)
+                        .padding(start = TulsiScreenPadding, end = TulsiScreenPadding, top = 8.dp, bottom = 12.dp)
                 ) {
                     Text(
                         text = "History",

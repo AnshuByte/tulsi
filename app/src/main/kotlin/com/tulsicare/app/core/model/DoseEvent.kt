@@ -1,4 +1,4 @@
-﻿package com.tulsicare.app.core.model
+package com.tulsicare.app.core.model
 
 enum class DoseStatus {
     PENDING,
@@ -21,6 +21,11 @@ data class DoseEvent(
     val actedAt: Long? = null,
     val actedBy: String? = null,
     val snoozeUntil: Long? = null,
+    val snoozeCount: Int = 0,
     val notes: String? = null,
     val createdAt: Long = System.currentTimeMillis()
 )
+
+fun generateDoseId(medicineId: String, scheduledAt: Long): String {
+    return "dose_${medicineId}_${scheduledAt}"
+}

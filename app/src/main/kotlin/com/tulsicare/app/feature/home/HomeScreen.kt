@@ -1,6 +1,5 @@
 package com.tulsicare.app.feature.home
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -10,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -74,6 +74,7 @@ fun HomeScreen(
         onSelectMember = viewModel::selectMember,
         onMarkTaken = viewModel::markDoseTaken,
         onMarkSkipped = viewModel::markDoseSkipped,
+        onRetry = viewModel::loadData,
         modifier = modifier
     )
 }
@@ -85,6 +86,7 @@ fun HomeScreenContent(
     onSelectMember: (String?) -> Unit,
     onMarkTaken: (String) -> Unit,
     onMarkSkipped: (String) -> Unit,
+    onRetry: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val colors = TulsiTheme.colors
@@ -110,6 +112,7 @@ fun HomeScreenContent(
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = colors.background,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         floatingActionButton = {
             // Single black circular button with '+'
             FloatingActionButton(
@@ -132,14 +135,14 @@ fun HomeScreenContent(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),
-            contentPadding = PaddingValues(bottom = 88.dp)
+            contentPadding = PaddingValues(bottom = 20.dp)
         ) {
             // Title & subtext header
             item(key = "header") {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = TulsiScreenPadding, vertical = 20.dp)
+                        .padding(start = TulsiScreenPadding, end = TulsiScreenPadding, top = 8.dp, bottom = 12.dp)
                 ) {
                     Text(
                         text = todayFormatted,
@@ -157,6 +160,54 @@ fun HomeScreenContent(
                         fontWeight = FontWeight.Normal,
                         color = colors.textSecondary
                     )
+                }
+            }
+
+            // Restoring from Cloud Loading Banner
+            if (uiState.isRestoringData) {
+                item(key = "restoring_banner") {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = TulsiScreenPadding, vertical = 6.dp)
+                            .background(Color(0xFF1E1E1E), RoundedCornerShape(TulsiCornerRadius))
+                            .padding(12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Restoring your data...",
+                            fontSize = 14.sp,
+                            color = Color(0xFFDDDDDD),
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+
+            // Restoration Error Banner with Retry
+            if (uiState.restorationError != null) {
+                item(key = "restoration_error_banner") {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = TulsiScreenPadding, vertical = 6.dp)
+                            .background(Color(0xFF2B1A1A), RoundedCornerShape(TulsiCornerRadius))
+                            .padding(12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = uiState.restorationError,
+                            fontSize = 13.sp,
+                            color = Color(0xFFFF9999),
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        TulsiButton(
+                            text = "Retry",
+                            onClick = onRetry
+                        )
+                    }
                 }
             }
 

@@ -36,19 +36,26 @@
             </intent-filter>
         </activity>
 
-        <!-- Full-screen Alarm Reminder Activity -->
+        <!-- Full-screen / Compact Popup Alarm Activity -->
         <activity
             android:name=".feature.alarm.AlarmActivity"
             android:exported="false"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
+            android:launchMode="singleInstance"
             android:showWhenLocked="true"
             android:turnScreenOn="true"
             android:showForAllUsers="true"
-            android:excludeFromRecents="true"
-            android:launchMode="singleTask" />
+            android:theme="@style/Theme.Tulsi.AlarmDialog" />
 
         <!-- Exact Alarm Broadcast Receiver -->
         <receiver
             android:name=".core.alarm.AlarmReceiver"
+            android:exported="false" />
+
+        <!-- Alarm & Pre-Reminder Actions Broadcast Receiver -->
+        <receiver
+            android:name=".core.alarm.AlarmActionReceiver"
             android:exported="false" />
 
         <!-- Reschedule Alarms after reboot or time change -->

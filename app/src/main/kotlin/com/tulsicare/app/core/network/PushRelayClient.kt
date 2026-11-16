@@ -58,6 +58,79 @@ class PushRelayClient @Inject constructor(
         }
     }
 
+    suspend fun relayDoseStatusToAdmin(
+        groupId: String,
+        actorUserId: String,
+        actorName: String,
+        medicineName: String,
+        dosage: String,
+        status: String,
+        time: String
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            if (workerBaseUrl.isBlank()) return@runCatching
+            val currentUser = auth.currentUser ?: return@runCatching
+            val idToken = currentUser.getIdToken(false).await()?.token ?: return@runCatching
+
+            // 1. Get group members and find admin
+            val membersSnapshot = firestore.collection("groups")
+                .document(groupId)
+                .collection("members")
+                .get()
+                .await()
+
+            var adminUserId: String? = null
+            for (doc in membersSnapshot.documents) {
+                val role = doc.getString("role")
+                if (role.equals("ADMIN", ignoreCase = true)) {
+                    adminUserId = doc.id
+                    break
+                }
+            }
+
+            // If no admin or if the actor IS the admin: skip push!
+            if (adminUserId == null || adminUserId == actorUserId) {
+                return@runCatching
+            }
+
+            // 2. Get tokens for the admin
+            val tokensSnapshot = firestore.collection("users")
+                .document(adminUserId)
+                .collection("fcmTokens")
+                .get()
+                .await()
+
+            val tokens = mutableListOf<String>()
+            for (tokenDoc in tokensSnapshot.documents) {
+                val token = tokenDoc.getString("token")
+                if (!token.isNullOrBlank()) {
+                    tokens.add(token)
+                }
+            }
+
+            if (tokens.isEmpty()) return@runCatching
+
+            val type = if (status.equals("TAKEN", ignoreCase = true)) "dose_taken" else "dose_skipped"
+            val tokensJson = tokens.joinToString(prefix = "[", postfix = "]") { "\"$it\"" }
+            val body = """
+                {
+                  "type": "$type",
+                  "tokens": $tokensJson,
+                  "data": {
+                    "memberName": "${escapeJson(actorName)}",
+                    "medicineName": "${escapeJson(medicineName)}",
+                    "dosage": "${escapeJson(dosage)}",
+                    "status": "$status",
+                    "time": "$time",
+                    "groupId": "$groupId"
+                  }
+                }
+            """.trimIndent()
+
+            postToWorker(idToken, body)
+        }
+    }
+
     suspend fun relayScheduleSync(groupId: String): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
             if (workerBaseUrl.isBlank()) return@runCatching

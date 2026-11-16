@@ -1,4 +1,4 @@
-﻿package com.tulsicare.app.core.database.entity
+package com.tulsicare.app.core.database.entity
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
@@ -20,6 +20,7 @@ data class DoseEventEntity(
     val actedAt: Long?,
     val actedBy: String?,
     val snoozeUntil: Long?,
+    val snoozeCount: Int = 0,
     val notes: String?,
     val createdAt: Long
 ) {
@@ -36,6 +37,7 @@ data class DoseEventEntity(
         actedAt = actedAt,
         actedBy = actedBy,
         snoozeUntil = snoozeUntil,
+        snoozeCount = snoozeCount,
         notes = notes,
         createdAt = createdAt
     )
@@ -54,6 +56,7 @@ fun DoseEvent.toEntity(): DoseEventEntity = DoseEventEntity(
     actedAt = actedAt,
     actedBy = actedBy,
     snoozeUntil = snoozeUntil,
+    snoozeCount = snoozeCount,
     notes = notes,
     createdAt = createdAt
 )

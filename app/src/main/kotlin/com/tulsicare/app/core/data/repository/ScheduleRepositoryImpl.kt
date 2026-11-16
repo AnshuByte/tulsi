@@ -1,12 +1,15 @@
 package com.tulsicare.app.core.data.repository
 
 import android.content.Context
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
 import com.tulsicare.app.core.alarm.ExactAlarmScheduler
+import com.tulsicare.app.core.data.sync.FirestoreListenerManager
 import com.tulsicare.app.core.database.dao.ScheduleDao
 import com.tulsicare.app.core.database.entity.toEntity
 import com.tulsicare.app.core.model.Schedule
 import com.tulsicare.app.core.network.PushRelayClient
-import com.google.firebase.firestore.FirebaseFirestore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -20,9 +23,11 @@ import javax.inject.Singleton
 @Singleton
 class ScheduleRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
+    private val auth: FirebaseAuth,
     private val scheduleDao: ScheduleDao,
     private val firestore: FirebaseFirestore,
-    private val pushRelayClient: PushRelayClient
+    private val pushRelayClient: PushRelayClient,
+    private val firestoreListenerManager: FirestoreListenerManager
 ) : ScheduleRepository {
 
     override fun observeActiveSchedules(groupId: String): Flow<List<Schedule>> {
@@ -101,13 +106,18 @@ class ScheduleRepositoryImpl @Inject constructor(
     }
 
     override fun syncSchedulesRealtime(groupId: String): Flow<List<Schedule>> = callbackFlow {
+        val currentUid = auth.currentUser?.uid.orEmpty()
         val registration = firestore.collection("groups")
             .document(groupId)
             .collection("schedules")
             .whereEqualTo("isActive", true)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    close(error)
+                    val isNotFoundOrDenied = error.code == FirebaseFirestoreException.Code.NOT_FOUND ||
+                            error.code == FirebaseFirestoreException.Code.PERMISSION_DENIED
+                    if (isNotFoundOrDenied) {
+                        trySend(emptyList())
+                    }
                     return@addSnapshotListener
                 }
 
@@ -118,6 +128,15 @@ class ScheduleRepositoryImpl @Inject constructor(
                 trySend(schedules)
             }
 
-        awaitClose { registration.remove() }
+        if (currentUid.isNotBlank()) {
+            firestoreListenerManager.register(currentUid, groupId, "schedules", registration)
+        }
+
+        awaitClose {
+            if (currentUid.isNotBlank()) {
+                firestoreListenerManager.removeListener(currentUid, groupId, "schedules")
+            }
+            registration.remove()
+        }
     }
 }

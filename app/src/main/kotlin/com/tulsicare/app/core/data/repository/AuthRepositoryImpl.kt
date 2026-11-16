@@ -1,14 +1,23 @@
 package com.tulsicare.app.core.data.repository
 
+import android.content.Context
+import android.util.Log
+import androidx.credentials.ClearCredentialStateRequest
+import androidx.credentials.CredentialManager
+import com.tulsicare.app.core.alarm.ExactAlarmScheduler
+import com.tulsicare.app.core.data.sync.FirestoreListenerManager
 import com.tulsicare.app.core.database.TulsiDatabase
 import com.tulsicare.app.core.messaging.FcmTokenManager
 import com.tulsicare.app.core.model.User
+import com.tulsicare.app.core.preferences.UserPreferencesRepository
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,18 +25,23 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class AuthRepositoryImpl @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val auth: FirebaseAuth,
     private val firestore: FirebaseFirestore,
     private val fcmTokenManager: FcmTokenManager,
-    private val database: TulsiDatabase
+    private val database: TulsiDatabase,
+    private val userPreferencesRepository: UserPreferencesRepository,
+    private val firestoreListenerManager: FirestoreListenerManager
 ) : AuthRepository {
 
     private val localUser = MutableStateFlow<User?>(null)
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override val currentUser: Flow<User?> = callbackFlow {
         val listener = FirebaseAuth.AuthStateListener { firebaseAuth ->
@@ -118,14 +132,23 @@ class AuthRepositoryImpl @Inject constructor(
             }
         }
         val uid = firebaseUser?.uid ?: "user_${trimmedEmail.lowercase().replace("@", "_").replace(".", "_")}"
+        val existingDoc = runCatching {
+            firestore.collection("users").document(uid).get().await()
+        }.getOrNull()
+        val existingGroupId = existingDoc?.getString("currentGroupId")
         val user = User(
             id = uid,
             displayName = trimmedEmail.substringBefore("@").replaceFirstChar { it.uppercase() },
             email = trimmedEmail,
             phoneNumber = firebaseUser?.phoneNumber.orEmpty(),
-            currentGroupId = "my_family"
+            currentGroupId = existingGroupId
         )
         localUser.value = user
+        if (existingGroupId != null) {
+            userPreferencesRepository.setCurrentGroupId(existingGroupId)
+        } else {
+            userPreferencesRepository.clearGroupId()
+        }
         try {
             fcmTokenManager.registerCurrentToken(uid)
         } catch (_: Exception) {}
@@ -223,14 +246,23 @@ class AuthRepositoryImpl @Inject constructor(
         }
 
         val uid = firebaseUser?.uid ?: "user_${trimmedEmail.lowercase().replace("@", "_").replace(".", "_")}"
+        val existingDoc = runCatching {
+            firestore.collection("users").document(uid).get().await()
+        }.getOrNull()
+        val existingGroupId = existingDoc?.getString("currentGroupId")
         val user = User(
             id = uid,
             displayName = trimmedName,
             email = trimmedEmail,
             phoneNumber = firebaseUser?.phoneNumber.orEmpty(),
-            currentGroupId = "my_family"
+            currentGroupId = existingGroupId
         )
         localUser.value = user
+        if (existingGroupId != null) {
+            userPreferencesRepository.setCurrentGroupId(existingGroupId)
+        } else {
+            userPreferencesRepository.clearGroupId()
+        }
         try {
             firestore.collection("users").document(uid).set(user, SetOptions.merge()).await()
             fcmTokenManager.registerCurrentToken(uid)
@@ -248,6 +280,9 @@ class AuthRepositoryImpl @Inject constructor(
     override suspend fun deleteAccount(): Result<Unit> = runCatching {
         val user = auth.currentUser ?: throw IllegalStateException("No authenticated user to delete")
         val uid = user.uid
+
+        // 0. Cancel all local alarms
+        ExactAlarmScheduler.cancelAllAlarms(context)
 
         // 1. Delete all registered FCM tokens
         fcmTokenManager.clearAllTokens(uid)
@@ -267,13 +302,60 @@ class AuthRepositoryImpl @Inject constructor(
     override suspend fun signOut() {
         localUser.value = null
         val uid = auth.currentUser?.uid
-        if (uid != null) {
-            fcmTokenManager.clearToken(uid)
+
+        // 1. FirebaseAuth and CredentialManager run FIRST (guaranteed)
+        try {
+            auth.signOut()
+        } catch (e: Exception) {
+            Log.e("AuthRepository", "Error signing out of FirebaseAuth", e)
         }
-        withContext(Dispatchers.IO) {
-            database.clearAllTables()
+
+        try {
+            val credentialManager = CredentialManager.create(context)
+            credentialManager.clearCredentialState(ClearCredentialStateRequest())
+        } catch (e: Exception) {
+            Log.e("AuthRepository", "Error clearing credential state", e)
         }
-        auth.signOut()
+
+        // 2. Best-effort cleanup executed in application-level scope so screen changes do not cancel it
+        appScope.launch {
+            // Detach all listeners
+            withTimeoutOrNull(3000L) {
+                runCatching {
+                    firestoreListenerManager.clearAllListeners()
+                }.onFailure { Log.e("AuthRepository", "Failed to detach listeners during signOut", it) }
+            }
+
+            // Cancel all local alarms
+            withTimeoutOrNull(3000L) {
+                runCatching {
+                    ExactAlarmScheduler.cancelAllAlarms(context)
+                }.onFailure { Log.e("AuthRepository", "Failed to cancel alarms during signOut", it) }
+            }
+
+            // Remove FCM token
+            if (uid != null) {
+                withTimeoutOrNull(3000L) {
+                    runCatching {
+                        fcmTokenManager.clearToken(uid)
+                    }.onFailure { Log.e("AuthRepository", "Failed to clear FCM token during signOut", it) }
+                }
+            }
+
+            // Clear Room database
+            withTimeoutOrNull(3000L) {
+                runCatching {
+                    database.clearAllTables()
+                }.onFailure { Log.e("AuthRepository", "Failed to clear Room during signOut", it) }
+            }
+
+            // Clear DataStore preferences
+            withTimeoutOrNull(3000L) {
+                runCatching {
+                    userPreferencesRepository.clear()
+                }.onFailure { Log.e("AuthRepository", "Failed to clear DataStore during signOut", it) }
+            }
+        }
     }
 
     override suspend fun updateUserProfile(user: User): Result<Unit> = runCatching {
@@ -284,9 +366,16 @@ class AuthRepositoryImpl @Inject constructor(
 
     override suspend fun updateCurrentGroupId(groupId: String): Result<Unit> = runCatching {
         val uid = auth.currentUser?.uid ?: return@runCatching
+        val cleanGroupId = groupId.trim().ifBlank { null }
+        localUser.value = localUser.value?.copy(currentGroupId = cleanGroupId)
         firestore.collection("users").document(uid)
-            .update("currentGroupId", groupId)
+            .set(mapOf("currentGroupId" to cleanGroupId), SetOptions.merge())
             .await()
+        if (cleanGroupId != null) {
+            userPreferencesRepository.setCurrentGroupId(cleanGroupId)
+        } else {
+            userPreferencesRepository.clearGroupId()
+        }
     }
 
     companion object {

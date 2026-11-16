@@ -74,7 +74,7 @@ class AddEditMedicineViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             val user = authRepository.getCurrentUser()
-            val groupId = if (initialGroupId.isNotBlank()) initialGroupId else user?.currentGroupId.orEmpty().ifBlank { "my_family" }
+            val groupId = if (initialGroupId.isNotBlank()) initialGroupId else user?.currentGroupId.orEmpty()
             val userId = user?.id.orEmpty()
 
             val members = if (groupId.isNotBlank()) {
@@ -174,6 +174,10 @@ class AddEditMedicineViewModel @Inject constructor(
             _uiState.update { it.copy(errorMessage = "Please add at least one reminder time") }
             return
         }
+        if (state.groupId.isBlank()) {
+            _uiState.update { it.copy(errorMessage = "Please create or join a family circle before adding medicines") }
+            return
+        }
 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
@@ -182,7 +186,7 @@ class AddEditMedicineViewModel @Inject constructor(
 
             val medicine = Medicine(
                 id = medicineId,
-                groupId = state.groupId.ifBlank { "my_family" },
+                groupId = state.groupId,
                 assignedMemberId = state.assignedMemberId,
                 name = state.name.trim(),
                 dosage = state.dosage.trim(),
@@ -209,18 +213,36 @@ class AddEditMedicineViewModel @Inject constructor(
                 isActive = true
             )
 
-            // 1. Save medicine
-            if (state.medicineId == null) {
+            // 1. Save medicine (confirmed written to Firestore or offline queue)
+            val medResult = if (state.medicineId == null) {
                 medicineRepository.addMedicine(medicine)
             } else {
                 medicineRepository.updateMedicine(medicine)
             }
+            if (medResult.isFailure) {
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = "Failed to save medicine: ${medResult.exceptionOrNull()?.message ?: "Write failed"}"
+                    )
+                }
+                return@launch
+            }
 
             // 2. Save schedule
-            if (existingScheduleId == null) {
+            val schedResult = if (existingScheduleId == null) {
                 scheduleRepository.addSchedule(schedule)
             } else {
                 scheduleRepository.updateSchedule(schedule)
+            }
+            if (schedResult.isFailure) {
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = "Failed to save schedule: ${schedResult.exceptionOrNull()?.message ?: "Write failed"}"
+                    )
+                }
+                return@launch
             }
 
             // 3. Generate today's dose events

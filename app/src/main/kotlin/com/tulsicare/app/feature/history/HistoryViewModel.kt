@@ -15,6 +15,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.Calendar
@@ -45,16 +46,36 @@ class HistoryViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(HistoryUiState())
     val uiState: StateFlow<HistoryUiState> = _uiState.asStateFlow()
 
+    private var loadHistoryJob: kotlinx.coroutines.Job? = null
+
     init {
-        loadHistory(7)
+        viewModelScope.launch {
+            authRepository.currentUser.collectLatest { user ->
+                if (user == null) {
+                    loadHistoryJob?.cancel()
+                    _uiState.update { it.copy(isLoading = false, events = emptyList()) }
+                } else {
+                    loadHistory(7)
+                }
+            }
+        }
     }
 
     fun loadHistory(days: Int) {
-        viewModelScope.launch {
+        loadHistoryJob?.cancel()
+        loadHistoryJob = viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, rangeDays = days) }
 
             val user = authRepository.getCurrentUser()
-            val groupId = user?.currentGroupId.orEmpty().ifBlank { "my_family" }
+            if (user == null) {
+                _uiState.update { it.copy(isLoading = false, events = emptyList()) }
+                return@launch
+            }
+            val groupId = user.currentGroupId.orEmpty()
+            if (groupId.isBlank()) {
+                _uiState.update { it.copy(isLoading = false, events = emptyList()) }
+                return@launch
+            }
             val group = familyGroupRepository.getGroup(groupId)
 
             val now = System.currentTimeMillis()

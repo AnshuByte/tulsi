@@ -351,6 +351,45 @@ test('Firestore Security Rules Comprehensive Test Suite', async (t) => {
     );
   });
 
+  // Test 8: Leave Family: User who has left cannot read or write to the old group
+  await t.test('8. Leave Family: Ex-member cannot read or write to the old group', async () => {
+    // Simulate Ravi leaving group_test_family
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      // Remove Ravi from members
+      await db.doc('groups/group_test_family/members/user_ravi_elderly').delete();
+      // Clear Ravi's currentGroupId
+      await db.doc('users/user_ravi_elderly').update({ currentGroupId: null });
+    });
+
+    // 1. Ex-member Ravi CANNOT read group document
+    await assertFails(raviDb.doc('groups/group_test_family').get());
+
+    // 2. Ex-member Ravi CANNOT read medicines
+    await assertFails(raviDb.doc('groups/group_test_family/medicines/med_paracetamol').get());
+
+    // 3. Ex-member Ravi CANNOT read members
+    await assertFails(raviDb.doc('groups/group_test_family/members/user_asha_admin').get());
+
+    // 4. Ex-member Ravi CANNOT read dose events
+    await assertFails(raviDb.doc('groups/group_test_family/doseEvents/event_ravi_morning').get());
+
+    // 5. Ex-member Ravi CANNOT update dose events in old group
+    await assertFails(
+      raviDb.doc('groups/group_test_family/doseEvents/event_ravi_morning').update({
+        status: 'TAKEN',
+      })
+    );
+
+    // 6. Ex-member Ravi CANNOT write medicines or inject doses into old group
+    await assertFails(
+      raviDb.doc('groups/group_test_family/medicines/med_hack').set({
+        id: 'med_hack',
+        name: 'Hack',
+      })
+    );
+  });
+
   // Cleanup test environment
   await testEnv.cleanup();
 });

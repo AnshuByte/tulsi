@@ -34,6 +34,9 @@ class AuthViewModel @Inject constructor(
         viewModelScope.launch {
             authRepository.currentUser.collect { user ->
                 _uiState.update { it.copy(currentUser = user) }
+                if (user == null) {
+                    resetForm()
+                }
             }
         }
     }
@@ -43,6 +46,19 @@ class AuthViewModel @Inject constructor(
     fun setDisplayName(name: String) = _uiState.update { it.copy(displayName = name, errorMessage = null) }
     fun toggleAuthMode() = _uiState.update { it.copy(isSignUp = !it.isSignUp, errorMessage = null) }
     fun setErrorMessage(message: String?) = _uiState.update { it.copy(errorMessage = message) }
+
+    fun resetForm() {
+        _uiState.update {
+            it.copy(
+                email = "",
+                password = "",
+                displayName = "",
+                isSignUp = false,
+                errorMessage = null,
+                isLoading = false
+            )
+        }
+    }
 
     fun submit() {
         val state = _uiState.value
@@ -68,7 +84,17 @@ class AuthViewModel @Inject constructor(
 
             result.fold(
                 onSuccess = { user ->
-                    _uiState.update { it.copy(isLoading = false, currentUser = user) }
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            currentUser = user,
+                            email = "",
+                            password = "",
+                            displayName = "",
+                            isSignUp = false,
+                            errorMessage = null
+                        )
+                    }
                 },
                 onFailure = { error ->
                     _uiState.update {
@@ -88,7 +114,17 @@ class AuthViewModel @Inject constructor(
             val result = authRepository.signInWithGoogle(idToken)
             result.fold(
                 onSuccess = { user ->
-                    _uiState.update { it.copy(isLoading = false, currentUser = user) }
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            currentUser = user,
+                            email = "",
+                            password = "",
+                            displayName = "",
+                            isSignUp = false,
+                            errorMessage = null
+                        )
+                    }
                 },
                 onFailure = { error ->
                     _uiState.update {
@@ -113,12 +149,32 @@ class AuthViewModel @Inject constructor(
 
             val signInResult = authRepository.signInWithEmail(email, password)
             if (signInResult.isSuccess) {
-                _uiState.update { it.copy(isLoading = false, currentUser = signInResult.getOrNull()) }
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        currentUser = signInResult.getOrNull(),
+                        email = "",
+                        password = "",
+                        displayName = "",
+                        isSignUp = false,
+                        errorMessage = null
+                    )
+                }
             } else {
                 val signUpResult = authRepository.signUpWithEmail(email, password, name)
                 signUpResult.fold(
                     onSuccess = { user ->
-                        _uiState.update { it.copy(isLoading = false, currentUser = user) }
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                currentUser = user,
+                                email = "",
+                                password = "",
+                                displayName = "",
+                                isSignUp = false,
+                                errorMessage = null
+                            )
+                        }
                     },
                     onFailure = { error ->
                         _uiState.update {
@@ -136,7 +192,7 @@ class AuthViewModel @Inject constructor(
     fun signOut() {
         viewModelScope.launch {
             authRepository.signOut()
-            _uiState.update { it.copy(currentUser = null, email = "", password = "") }
+            _uiState.value = AuthUiState()
         }
     }
 }

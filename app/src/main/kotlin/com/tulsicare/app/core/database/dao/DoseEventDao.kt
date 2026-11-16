@@ -35,7 +35,7 @@ interface DoseEventDao {
 
     @Query("""
         UPDATE dose_events 
-        SET status = :status, snoozeUntil = :snoozeUntil 
+        SET status = :status, snoozeUntil = :snoozeUntil, snoozeCount = snoozeCount + 1 
         WHERE id = :id
     """)
     suspend fun snoozeDose(

@@ -1,11 +1,6 @@
 package com.tulsicare.app.feature.auth
 
 import android.content.Context
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -56,6 +51,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
@@ -349,11 +345,7 @@ fun AuthScreenContent(
                         )
                     }
 
-                    AnimatedVisibility(
-                        visible = showDevAccounts,
-                        enter = fadeIn() + expandVertically(),
-                        exit = fadeOut() + shrinkVertically()
-                    ) {
+                    if (showDevAccounts) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -385,9 +377,9 @@ fun AuthScreenContent(
 
 /**
  * Native Credential Manager sign-in helper:
- * - Uses GetGoogleIdOption with serverClientId
- * - Attempts setFilterByAuthorizedAccounts(true) first
- * - Falls back to setFilterByAuthorizedAccounts(false) to show native Google account bottom-sheet picker
+ * - Clears stale credential state first
+ * - Uses GetGoogleIdOption with filterByAuthorizedAccounts = false and autoSelectEnabled = false
+ *   so the native Google account bottom-sheet picker displays ALL accounts on the device
  * - Catches cancellation silently, returns friendly messages on network/no-account errors
  */
 private suspend fun launchCredentialManagerGoogleSignIn(
@@ -405,58 +397,39 @@ private suspend fun launchCredentialManagerGoogleSignIn(
 
         val credentialManager = CredentialManager.create(context)
 
-        var credentialResponse: GetCredentialResponse? = null
-
-        // 1. Try authorized accounts first
+        // Clear any stale cached credential state so the user is free to pick any account
         try {
-            val authorizedOption = GetGoogleIdOption.Builder()
-                .setFilterByAuthorizedAccounts(true)
-                .setServerClientId(serverClientId)
-                .setAutoSelectEnabled(true)
-                .build()
+            credentialManager.clearCredentialState(ClearCredentialStateRequest())
+        } catch (_: Exception) {}
 
-            val request = GetCredentialRequest.Builder()
-                .addCredentialOption(authorizedOption)
-                .build()
+        val googleIdOption = GetGoogleIdOption.Builder()
+            .setFilterByAuthorizedAccounts(false)
+            .setServerClientId(serverClientId)
+            .setAutoSelectEnabled(false)
+            .build()
 
-            credentialResponse = credentialManager.getCredential(
+        val request = GetCredentialRequest.Builder()
+            .addCredentialOption(googleIdOption)
+            .build()
+
+        val credentialResponse = try {
+            credentialManager.getCredential(
                 request = request,
                 context = context
             )
         } catch (e: GetCredentialCancellationException) {
-            // User cancelled; exit quietly
+            // User dismissed the account picker; exit quietly
             return
-        } catch (_: Exception) {
-            // Fallback: Retry with filterByAuthorizedAccounts = false to display the native account picker
-            try {
-                val allAccountsOption = GetGoogleIdOption.Builder()
-                    .setFilterByAuthorizedAccounts(false)
-                    .setServerClientId(serverClientId)
-                    .setAutoSelectEnabled(false)
-                    .build()
-
-                val requestAll = GetCredentialRequest.Builder()
-                    .addCredentialOption(allAccountsOption)
-                    .build()
-
-                credentialResponse = credentialManager.getCredential(
-                    request = requestAll,
-                    context = context
-                )
-            } catch (e2: GetCredentialCancellationException) {
-                // User cancelled account picker; exit quietly
-                return
-            } catch (e2: NoCredentialException) {
-                onError("No Google account found on device.")
-                return
-            } catch (e2: Exception) {
-                val msg = e2.localizedMessage ?: "Google sign in failed."
-                onError(if (msg.contains("network", ignoreCase = true)) "Network connection error." else msg)
-                return
-            }
+        } catch (e: NoCredentialException) {
+            onError("No Google account found on device.")
+            return
+        } catch (e: Exception) {
+            val msg = e.localizedMessage ?: "Google sign in failed."
+            onError(if (msg.contains("network", ignoreCase = true)) "Network connection error." else msg)
+            return
         }
 
-        val credential = credentialResponse?.credential
+        val credential = credentialResponse.credential
         if (credential is CustomCredential && credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
             val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
             onIdTokenReceived(googleIdTokenCredential.idToken)

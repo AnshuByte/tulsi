@@ -76,9 +76,11 @@ fun FamilyGroupScreen(
         onCreateGroup = viewModel::createGroup,
         onJoinGroup = viewModel::joinGroup,
         onLeaveGroup = viewModel::leaveGroup,
+        onDeleteGroup = viewModel::deleteGroup,
         onShowCreateDialog = viewModel::setShowCreateDialog,
         onShowJoinDialog = viewModel::setShowJoinDialog,
         onShowLeaveDialog = viewModel::setShowLeaveDialog,
+        onShowDeleteDialog = viewModel::setShowDeleteDialog,
         onCopyInviteCode = { code ->
             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             clipboard.setPrimaryClip(ClipData.newPlainText("Tulsi Invite Code", code))
@@ -105,9 +107,11 @@ fun FamilyGroupScreenContent(
     onCreateGroup: (String) -> Unit,
     onJoinGroup: (String) -> Unit,
     onLeaveGroup: () -> Unit,
+    onDeleteGroup: () -> Unit,
     onShowCreateDialog: (Boolean) -> Unit,
     onShowJoinDialog: (Boolean) -> Unit,
     onShowLeaveDialog: (Boolean) -> Unit,
+    onShowDeleteDialog: (Boolean) -> Unit,
     onCopyInviteCode: (String) -> Unit,
     onShareInviteCode: (String, String) -> Unit,
     modifier: Modifier = Modifier
@@ -116,16 +120,14 @@ fun FamilyGroupScreenContent(
     var newGroupName by remember { mutableStateOf("") }
     var joinInviteCode by remember { mutableStateOf("") }
 
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        containerColor = colors.background
-    ) { innerPadding ->
+    Box(
+        modifier = modifier.fillMaxSize().background(colors.background)
+    ) {
         if (uiState.group == null) {
             // No family group yet: Calm empty state with options to Create or Join
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(innerPadding)
                     .padding(horizontal = TulsiScreenPadding),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
@@ -168,17 +170,15 @@ fun FamilyGroupScreenContent(
             val deduplicatedMembers = uiState.members.distinctBy { it.userId }
 
             LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-                contentPadding = PaddingValues(bottom = 88.dp)
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 20.dp)
             ) {
                 // Header: Group Name
                 item(key = "group_header") {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = TulsiScreenPadding, vertical = 20.dp)
+                            .padding(start = TulsiScreenPadding, end = TulsiScreenPadding, top = 8.dp, bottom = 12.dp)
                     ) {
                         Text(
                             text = group.name,
@@ -335,20 +335,38 @@ fun FamilyGroupScreenContent(
                     )
                 }
 
-                // Leave Family quiet text button at the bottom
-                item(key = "leave_button") {
-                    Spacer(modifier = Modifier.height(32.dp))
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = TulsiScreenPadding),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        TulsiTextButton(
-                            text = "Leave family",
-                            onClick = { onShowLeaveDialog(true) },
-                            textColor = colors.statusMissed
-                        )
+                // Leave or Delete Family button at the bottom
+                if (uiState.isAdmin) {
+                    item(key = "delete_button") {
+                        Spacer(modifier = Modifier.height(32.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = TulsiScreenPadding),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            TulsiTextButton(
+                                text = "Delete family",
+                                onClick = { onShowDeleteDialog(true) },
+                                textColor = colors.statusMissed
+                            )
+                        }
+                    }
+                } else {
+                    item(key = "leave_button") {
+                        Spacer(modifier = Modifier.height(32.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = TulsiScreenPadding),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            TulsiTextButton(
+                                text = "Leave family",
+                                onClick = { onShowLeaveDialog(true) },
+                                textColor = colors.statusMissed
+                            )
+                        }
                     }
                 }
             }
@@ -429,6 +447,16 @@ fun FamilyGroupScreenContent(
                             placeholder = "e.g. A1B2C3",
                             singleLine = true
                         )
+
+                        if (!uiState.errorMessage.isNullOrBlank()) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = uiState.errorMessage,
+                                fontSize = 13.sp,
+                                color = colors.statusMissed,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
                     }
                 },
                 confirmButton = {
@@ -436,7 +464,6 @@ fun FamilyGroupScreenContent(
                         text = "Join",
                         onClick = {
                             onJoinGroup(joinInviteCode)
-                            joinInviteCode = ""
                         },
                         isLoading = uiState.isLoading
                     )
@@ -487,6 +514,44 @@ fun FamilyGroupScreenContent(
                 }
             )
         }
+
+        // Dialog: Confirmation for Deleting Family (Admin only)
+        if (uiState.showDeleteDialog) {
+            AlertDialog(
+                onDismissRequest = { onShowDeleteDialog(false) },
+                containerColor = colors.background,
+                title = {
+                    Text(
+                        text = "Delete Family?",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = colors.statusMissed
+                    )
+                },
+                text = {
+                    Text(
+                        text = "This will permanently delete the family group, all medicine schedules, and invite codes for all members. This action cannot be undone.",
+                        fontSize = 14.sp,
+                        color = colors.textSecondary
+                    )
+                },
+                confirmButton = {
+                    TulsiButton(
+                        text = "Delete family",
+                        onClick = {
+                            onShowDeleteDialog(false)
+                            onDeleteGroup()
+                        }
+                    )
+                },
+                dismissButton = {
+                    TulsiTextButton(
+                        text = "Cancel",
+                        onClick = { onShowDeleteDialog(false) }
+                    )
+                }
+            )
+        }
     }
 }
 
@@ -503,9 +568,11 @@ fun FamilyGroupScreenPreviewLight() {
             onCreateGroup = {},
             onJoinGroup = {},
             onLeaveGroup = {},
+            onDeleteGroup = {},
             onShowCreateDialog = {},
             onShowJoinDialog = {},
             onShowLeaveDialog = {},
+            onShowDeleteDialog = {},
             onCopyInviteCode = {},
             onShareInviteCode = { _, _ -> }
         )
@@ -521,9 +588,11 @@ fun FamilyGroupScreenPreviewDark() {
             onCreateGroup = {},
             onJoinGroup = {},
             onLeaveGroup = {},
+            onDeleteGroup = {},
             onShowCreateDialog = {},
             onShowJoinDialog = {},
             onShowLeaveDialog = {},
+            onShowDeleteDialog = {},
             onCopyInviteCode = {},
             onShareInviteCode = { _, _ -> }
         )
@@ -539,9 +608,11 @@ fun FamilyGroupScreenPreviewLargeFont() {
             onCreateGroup = {},
             onJoinGroup = {},
             onLeaveGroup = {},
+            onDeleteGroup = {},
             onShowCreateDialog = {},
             onShowJoinDialog = {},
             onShowLeaveDialog = {},
+            onShowDeleteDialog = {},
             onCopyInviteCode = {},
             onShareInviteCode = { _, _ -> }
         )

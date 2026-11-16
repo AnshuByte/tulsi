@@ -11,7 +11,6 @@ import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -278,7 +277,7 @@ fun BatteryOptimizationScreen(
                     )
                 }
 
-                AnimatedVisibility(visible = showManufacturerSteps) {
+                if (showManufacturerSteps) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()

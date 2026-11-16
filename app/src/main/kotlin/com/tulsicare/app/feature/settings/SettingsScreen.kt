@@ -1,7 +1,6 @@
 package com.tulsicare.app.feature.settings
 
 import android.content.Context
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -66,33 +65,34 @@ import com.tulsicare.app.core.model.User
 fun SettingsScreen(
     currentUser: User?,
     isSimpleMode: Boolean,
+    preReminderLeadMinutes: Int = 10,
     onToggleSimpleMode: (Boolean) -> Unit,
+    onSetPreReminderLeadMinutes: (Int) -> Unit = {},
     onNavigateToReliability: () -> Unit,
     onTriggerTestAlarm: () -> Unit,
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val colors = TulsiTheme.colors
+    var isSigningOut by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
     var showMedicalDisclaimer by remember { mutableStateOf(false) }
     var showAboutDialog by remember { mutableStateOf(false) }
+    var showPreReminderDialog by remember { mutableStateOf(false) }
 
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        containerColor = colors.background
-    ) { innerPadding ->
+    Box(
+        modifier = modifier.fillMaxSize().background(colors.background)
+    ) {
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(bottom = 88.dp)
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 20.dp)
         ) {
             // Header
             item(key = "header") {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = TulsiScreenPadding, vertical = 20.dp)
+                        .padding(start = TulsiScreenPadding, end = TulsiScreenPadding, top = 8.dp, bottom = 12.dp)
                 ) {
                     Text(
                         text = "Settings",
@@ -179,6 +179,25 @@ fun SettingsScreen(
                 )
             }
 
+            // Pre-reminder lead time (Off / 5 / 10 / 15 / 30 min)
+            item(key = "pre_reminder") {
+                val leadText = if (preReminderLeadMinutes <= 0) "Off" else "$preReminderLeadMinutes minutes before each dose"
+                TulsiListRow(
+                    title = "Pre-reminder",
+                    subtitle = leadText,
+                    leadingContent = {
+                        Icon(
+                            imageVector = Icons.Outlined.Notifications,
+                            contentDescription = null,
+                            tint = colors.textPrimary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    },
+                    onClick = { showPreReminderDialog = true },
+                    showDivider = true
+                )
+            }
+
             // Privacy & Medical Disclaimer
             item(key = "disclaimer") {
                 TulsiListRow(
@@ -256,8 +275,8 @@ fun SettingsScreen(
                 ) {
                     TulsiTextButton(
                         text = "Sign out",
-                        onClick = { showLogoutDialog = true },
-                        textColor = colors.textSecondary
+                        onClick = { if (!isSigningOut) showLogoutDialog = true },
+                        textColor = colors.statusMissed
                     )
                 }
             }
@@ -354,9 +373,13 @@ fun SettingsScreen(
                 confirmButton = {
                     TulsiButton(
                         text = "Sign out",
+                        enabled = !isSigningOut,
                         onClick = {
-                            showLogoutDialog = false
-                            onSignOut()
+                            if (!isSigningOut) {
+                                isSigningOut = true
+                                showLogoutDialog = false
+                                onSignOut()
+                            }
                         }
                     )
                 },
@@ -364,6 +387,53 @@ fun SettingsScreen(
                     TulsiTextButton(
                         text = "Cancel",
                         onClick = { showLogoutDialog = false }
+                    )
+                }
+            )
+        }
+
+        // Pre-reminder Lead Time Dialog
+        if (showPreReminderDialog) {
+            AlertDialog(
+                onDismissRequest = { showPreReminderDialog = false },
+                containerColor = colors.surface,
+                title = {
+                    Text(
+                        text = "Pre-reminder lead time",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = colors.textPrimary
+                    )
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(
+                            0 to "Off",
+                            5 to "5 minutes before",
+                            10 to "10 minutes before (Default)",
+                            15 to "15 minutes before",
+                            30 to "30 minutes before"
+                        ).forEach { (mins, label) ->
+                            val isSelected = preReminderLeadMinutes == mins
+                            TulsiListRow(
+                                title = label,
+                                onClick = {
+                                    onSetPreReminderLeadMinutes(mins)
+                                    showPreReminderDialog = false
+                                },
+                                trailingContent = {
+                                    if (isSelected) {
+                                        Text("✓", color = colors.buttonPrimary, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    TulsiTextButton(
+                        text = "Close",
+                        onClick = { showPreReminderDialog = false }
                     )
                 }
             )

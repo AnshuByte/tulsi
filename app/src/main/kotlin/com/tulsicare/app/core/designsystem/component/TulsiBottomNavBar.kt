@@ -8,8 +8,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -52,6 +54,7 @@ fun TulsiBottomNavBar(
         modifier = modifier
             .fillMaxWidth()
             .background(colors.background)
+            .navigationBarsPadding()
     ) {
         HorizontalDivider(
             thickness = TulsiBorderWidth,
@@ -61,7 +64,7 @@ fun TulsiBottomNavBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(64.dp)
+                .height(60.dp)
                 .padding(horizontal = 8.dp),
             horizontalArrangement = Arrangement.SpaceAround,
             verticalAlignment = Alignment.CenterVertically
@@ -75,7 +78,7 @@ fun TulsiBottomNavBar(
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(64.dp)
+                        .fillMaxHeight()
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = ripple(bounded = false, radius = 24.dp),
@@ -98,9 +101,10 @@ fun TulsiBottomNavBar(
 
                         Text(
                             text = tab.title,
-                            fontSize = 12.sp,
+                            fontSize = 11.sp,
                             fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal,
-                            color = itemColor
+                            color = itemColor,
+                            lineHeight = 13.sp
                         )
 
                         Spacer(modifier = Modifier.height(3.dp))

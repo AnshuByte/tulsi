@@ -1,8 +1,9 @@
-﻿package com.tulsicare.app.core.di
+package com.tulsicare.app.core.di
 
 import android.content.Context
 import androidx.room.Room
 import com.tulsicare.app.core.database.TulsiDatabase
+import com.tulsicare.app.core.database.dao.AlarmRecordDao
 import com.tulsicare.app.core.database.dao.DoseEventDao
 import com.tulsicare.app.core.database.dao.FamilyGroupDao
 import com.tulsicare.app.core.database.dao.MedicineDao
@@ -43,4 +44,7 @@ object DatabaseModule {
 
     @Provides
     fun provideFamilyGroupDao(db: TulsiDatabase): FamilyGroupDao = db.familyGroupDao()
+
+    @Provides
+    fun provideAlarmRecordDao(db: TulsiDatabase): AlarmRecordDao = db.alarmRecordDao()
 }

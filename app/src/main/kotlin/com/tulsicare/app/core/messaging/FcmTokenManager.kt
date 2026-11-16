@@ -7,6 +7,7 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -27,13 +28,17 @@ class FcmTokenManager @Inject constructor(
 
     suspend fun clearToken(userId: String) {
         try {
-            val token = messaging.token.await()
-            firestore.collection("users")
-                .document(userId)
-                .collection("fcmTokens")
-                .document(token)
-                .delete()
-                .await()
+            val token = withTimeoutOrNull(3000L) {
+                messaging.token.await()
+            } ?: return
+            withTimeoutOrNull(3000L) {
+                firestore.collection("users")
+                    .document(userId)
+                    .collection("fcmTokens")
+                    .document(token)
+                    .delete()
+                    .await()
+            }
         } catch (_: Exception) {
         }
     }
