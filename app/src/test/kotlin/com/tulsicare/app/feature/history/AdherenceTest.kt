@@ -1,4 +1,4 @@
-﻿package com.tulsicare.app.feature.history
+package com.tulsicare.app.feature.history
 
 import com.tulsicare.app.core.model.DoseEvent
 import com.tulsicare.app.core.model.DoseStatus

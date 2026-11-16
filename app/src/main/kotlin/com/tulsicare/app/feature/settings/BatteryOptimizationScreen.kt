@@ -1,4 +1,4 @@
-﻿package com.tulsicare.app.feature.settings
+package com.tulsicare.app.feature.settings
 
 import android.app.AlarmManager
 import android.content.Context

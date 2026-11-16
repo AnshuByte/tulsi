@@ -239,14 +239,30 @@ export default {
       const now = Date.now();
       const overdueQueryUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents:runQuery`;
 
+      // Bounded 24-hour lookback to prevent full collection scans of historical data
+      const oneDayAgo = now - 24 * 60 * 60 * 1000;
       const firestoreQuery = {
         structuredQuery: {
           from: [{ collectionId: 'doseEvents', allDescendants: true }],
           where: {
-            fieldFilter: {
-              field: { fieldPath: 'status' },
-              op: 'EQUAL',
-              value: { stringValue: 'PENDING' },
+            compositeFilter: {
+              op: 'AND',
+              filters: [
+                {
+                  fieldFilter: {
+                    field: { fieldPath: 'status' },
+                    op: 'EQUAL',
+                    value: { stringValue: 'PENDING' },
+                  },
+                },
+                {
+                  fieldFilter: {
+                    field: { fieldPath: 'scheduledAt' },
+                    op: 'GREATER_THAN_OR_EQUAL',
+                    value: { integerValue: oneDayAgo.toString() },
+                  },
+                },
+              ],
             },
           },
         },

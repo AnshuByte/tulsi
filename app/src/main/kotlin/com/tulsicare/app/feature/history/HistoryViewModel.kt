@@ -1,4 +1,4 @@
-﻿package com.tulsicare.app.feature.history
+package com.tulsicare.app.feature.history
 
 import android.content.Context
 import android.content.Intent
