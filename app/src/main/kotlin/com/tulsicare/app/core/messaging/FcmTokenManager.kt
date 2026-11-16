@@ -38,6 +38,20 @@ class FcmTokenManager @Inject constructor(
         }
     }
 
+    suspend fun clearAllTokens(userId: String) {
+        try {
+            val snapshot = firestore.collection("users")
+                .document(userId)
+                .collection("fcmTokens")
+                .get()
+                .await()
+            for (doc in snapshot.documents) {
+                doc.reference.delete().await()
+            }
+        } catch (_: Exception) {
+        }
+    }
+
     private suspend fun saveToken(userId: String, token: String) {
         val deviceName = "${Build.MANUFACTURER} ${Build.MODEL}"
         val tokenData = mapOf(
