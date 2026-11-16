@@ -117,3 +117,5 @@ Here is an example walkthrough of **Person A (Elderly Parent / Patient)** and **
 The debug APK has been assembled and verified:
 - **Location:** [`app/build/outputs/apk/debug/app-debug.apk`](file:///c:/Users/Anshu/Desktop/Projects/DoseCircle/app/build/outputs/apk/debug/app-debug.apk)
 - **Compilation target:** `compileSdk = 35`, `targetSdk = 35`, `minSdk = 26`, Java 21, Kotlin 2.0.21, Jetpack Compose BOM 2024.10.01.
+
+# tulsi

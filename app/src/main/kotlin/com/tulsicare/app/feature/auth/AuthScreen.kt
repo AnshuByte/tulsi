@@ -1,12 +1,16 @@
 package com.tulsicare.app.feature.auth
 
-import com.tulsicare.app.BuildConfig
-
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.BorderStroke
+import android.content.Context
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -18,84 +22,72 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AdminPanelSettings
-import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.People
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.credentials.CredentialManager
+import androidx.credentials.CustomCredential
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.GetCredentialResponse
+import androidx.credentials.exceptions.GetCredentialCancellationException
+import androidx.credentials.exceptions.NoCredentialException
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.google.android.gms.auth.api.signin.GoogleSignIn
-import com.google.android.gms.auth.api.signin.GoogleSignInOptions
-import com.google.android.gms.common.ConnectionResult
-import com.google.android.gms.common.GoogleApiAvailability
-import com.google.android.gms.common.api.ApiException
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import com.tulsicare.app.BuildConfig
 import com.tulsicare.app.R
-import com.tulsicare.app.core.designsystem.PrimaryTeal
+import com.tulsicare.app.core.designsystem.TulsiBorderWidth
+import com.tulsicare.app.core.designsystem.TulsiCornerRadius
+import com.tulsicare.app.core.designsystem.TulsiScreenPadding
+import com.tulsicare.app.core.designsystem.TulsiTheme
+import com.tulsicare.app.core.designsystem.component.TulsiButton
+import com.tulsicare.app.core.designsystem.component.TulsiGoogleSignInButton
+import com.tulsicare.app.core.designsystem.component.TulsiOutlinedButton
+import com.tulsicare.app.core.designsystem.component.TulsiTextButton
+import com.tulsicare.app.core.designsystem.component.TulsiTextField
+import kotlinx.coroutines.launch
 
 @Composable
 fun AuthScreen(
     viewModel: AuthViewModel,
-    onAuthSuccess: () -> Unit
+    onAuthSuccess: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
-
-    val isPlayServicesAvailable = remember(context) {
-        GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(context) == ConnectionResult.SUCCESS
-    }
-
-    val googleSignInLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
-        try {
-            val account = task.getResult(ApiException::class.java)
-            val idToken = account?.idToken
-            val email = account?.email
-            val displayName = account?.displayName.orEmpty()
-            if (!idToken.isNullOrBlank()) {
-                viewModel.signInWithGoogleIdToken(idToken)
-            } else if (!email.isNullOrBlank()) {
-                viewModel.signInWithGmailDirect(email, displayName)
-            } else {
-                viewModel.showDirectGmailDialog(true)
-            }
-        } catch (e: Exception) {
-            // Smoothly fall back to direct Gmail dialog if Google Play Services is missing or unconfigured
-            viewModel.showDirectGmailDialog(true)
-        }
-    }
+    val coroutineScope = rememberCoroutineScope()
+    var isGoogleLoading by remember { mutableStateOf(false) }
 
     LaunchedEffect(uiState.currentUser) {
         if (uiState.currentUser != null) {
@@ -103,350 +95,436 @@ fun AuthScreen(
         }
     }
 
+    AuthScreenContent(
+        uiState = uiState,
+        isGoogleLoading = isGoogleLoading,
+        onGoogleSignInClick = {
+            if (isGoogleLoading || uiState.isLoading) return@AuthScreenContent
+            coroutineScope.launch {
+                isGoogleLoading = true
+                launchCredentialManagerGoogleSignIn(
+                    context = context,
+                    onIdTokenReceived = { idToken ->
+                        viewModel.signInWithGoogleIdToken(idToken)
+                    },
+                    onError = { message ->
+                        viewModel.setErrorMessage(message)
+                    },
+                    onComplete = {
+                        isGoogleLoading = false
+                    }
+                )
+            }
+        },
+        onEmailChange = viewModel::setEmail,
+        onPasswordChange = viewModel::setPassword,
+        onDisplayNameChange = viewModel::setDisplayName,
+        onSubmit = viewModel::submit,
+        onToggleMode = viewModel::toggleAuthMode,
+        onQuickSignIn = viewModel::quickSignIn,
+        modifier = modifier
+    )
+}
+
+@Composable
+fun AuthScreenContent(
+    uiState: AuthUiState,
+    isGoogleLoading: Boolean,
+    onGoogleSignInClick: () -> Unit,
+    onEmailChange: (String) -> Unit,
+    onPasswordChange: (String) -> Unit,
+    onDisplayNameChange: (String) -> Unit,
+    onSubmit: () -> Unit,
+    onToggleMode: () -> Unit,
+    onQuickSignIn: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = TulsiTheme.colors
+    val focusManager = LocalFocusManager.current
+    var showDevAccounts by remember { mutableStateOf(false) }
+
     Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        containerColor = MaterialTheme.colorScheme.background
-    ) { paddingValues ->
+        modifier = modifier.fillMaxSize(),
+        containerColor = colors.background
+    ) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
+                .padding(innerPadding)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 32.dp),
+                .padding(horizontal = TulsiScreenPadding, vertical = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // Brand Mark & Header
-            Image(
-                painter = painterResource(id = R.drawable.ic_tulsi_logo),
-                contentDescription = "Tulsi",
-                modifier = Modifier.size(56.dp)
-            )
-
             Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                Spacer(modifier = Modifier.height(32.dp))
+
+                // Centered small leaf logo
+                Image(
+                    painter = painterResource(id = R.drawable.ic_tulsi_logo),
+                    contentDescription = "Tulsi Logo",
+                    modifier = Modifier.size(44.dp)
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // "Tulsi" wordmark (28sp Title)
                 Text(
                     text = "Tulsi",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.textPrimary,
+                    letterSpacing = (-0.5).sp
                 )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // One line of subtext
                 Text(
                     text = "Family medicine reminder",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Normal,
+                    color = colors.textSecondary
                 )
-            }
 
-            Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(40.dp))
 
-            // Direct Gmail / Google Sign-In (Official button)
-            OutlinedButton(
-                onClick = {
-                    if (isPlayServicesAvailable) {
-                        try {
-                            val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-                                .requestEmail()
-                                .build()
-                            val client = GoogleSignIn.getClient(context, gso)
-                            googleSignInLauncher.launch(client.signInIntent)
-                        } catch (e: Exception) {
-                            viewModel.showDirectGmailDialog(true)
-                        }
-                    } else {
-                        // Directly open Gmail login modal
-                        viewModel.showDirectGmailDialog(true)
-                    }
-                },
-                shape = RoundedCornerShape(8.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-            ) {
+                // Full-width "Continue with Google" button
+                TulsiGoogleSignInButton(
+                    onClick = onGoogleSignInClick,
+                    isLoading = isGoogleLoading,
+                    enabled = !isGoogleLoading && !uiState.isLoading,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Thin "or" divider
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.ic_google_logo),
-                        contentDescription = "Google",
-                        modifier = Modifier.size(20.dp)
+                    HorizontalDivider(
+                        modifier = Modifier.weight(1f),
+                        thickness = TulsiBorderWidth,
+                        color = colors.border
                     )
-                    Spacer(modifier = Modifier.width(12.dp))
                     Text(
-                        text = "Continue with Google / Gmail",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface
+                        text = "or",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Normal,
+                        color = colors.textSecondary,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.weight(1f),
+                        thickness = TulsiBorderWidth,
+                        color = colors.border
                     )
                 }
-            }
 
-            // Direct Gmail one-tap quick action link
-            TextButton(
-                onClick = { viewModel.showDirectGmailDialog(true) },
-                modifier = Modifier.height(36.dp)
-            ) {
-                Text(
-                    text = "Sign in direct with Gmail address",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = PrimaryTeal
-                )
-            }
+                Spacer(modifier = Modifier.height(24.dp))
 
-            // Testing profiles (Admin / Patient / Member - Debug/Test builds only)
-            if (BuildConfig.DEBUG) {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 1.dp,
-                    shadowElevation = 0.dp,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Text(
-                            text = "Testing profiles",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            OutlinedButton(
-                                onClick = { viewModel.quickSignIn("ADMIN") },
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Icon(Icons.Default.AdminPanelSettings, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Text("Asha\nAdmin", style = MaterialTheme.typography.labelSmall)
-                                }
-                            }
-
-                            OutlinedButton(
-                                onClick = { viewModel.quickSignIn("PATIENT") },
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Text("Ravi\nPatient", style = MaterialTheme.typography.labelSmall)
-                                }
-                            }
-
-                            OutlinedButton(
-                                onClick = { viewModel.quickSignIn("MEMBER") },
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Icon(Icons.Default.People, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Text("Meera\nMember", style = MaterialTheme.typography.labelSmall)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                HorizontalDivider(modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.outlineVariant)
-                Text(
-                    text = "  or sign in with password  ",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline
-                )
-                HorizontalDivider(modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.outlineVariant)
-            }
-
-            // Error display
-            if (uiState.errorMessage != null) {
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
-                        Text(
-                            text = uiState.errorMessage.orEmpty(),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    }
-                }
-            }
-
-            // Form inputs
-            if (uiState.isSignUp) {
-                OutlinedTextField(
-                    value = uiState.displayName,
-                    onValueChange = viewModel::setDisplayName,
-                    label = { Text("Full name") },
-                    leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-
-            OutlinedTextField(
-                value = uiState.email,
-                onValueChange = viewModel::setEmail,
-                label = { Text("Email") },
-                leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                shape = RoundedCornerShape(8.dp),
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            OutlinedTextField(
-                value = uiState.password,
-                onValueChange = viewModel::setPassword,
-                label = { Text("Password") },
-                leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                shape = RoundedCornerShape(8.dp),
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Button(
-                onClick = viewModel::submit,
-                enabled = !uiState.isLoading,
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryTeal),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-            ) {
-                if (uiState.isLoading) {
-                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                } else {
-                    Text(
-                        text = if (uiState.isSignUp) "Create account" else "Sign in",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            }
-
-            TextButton(onClick = viewModel::toggleAuthMode) {
-                Text(
-                    text = if (uiState.isSignUp) "Already have an account? Sign in" else "Don't have an account? Create account",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = PrimaryTeal
-                )
-            }
-        }
-    }
-
-    // Direct Gmail Dialog
-    if (uiState.showDirectGmailDialog) {
-        AlertDialog(
-            onDismissRequest = { viewModel.showDirectGmailDialog(false) },
-            title = {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.ic_google_logo),
-                        contentDescription = "Google",
-                        modifier = Modifier.size(22.dp)
-                    )
-                    Text("Sign in direct with Gmail")
-                }
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        text = "Enter your Gmail address to sign in immediately without typing a password.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    OutlinedTextField(
-                        value = uiState.directGmailInput,
-                        onValueChange = viewModel::setDirectGmailInput,
-                        placeholder = { Text("username@gmail.com") },
-                        leadingIcon = {
-                            Icon(Icons.Default.Email, contentDescription = null, modifier = Modifier.size(20.dp))
-                        },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                // Optional name for registration
+                if (uiState.isSignUp) {
+                    TulsiTextField(
+                        value = uiState.displayName,
+                        onValueChange = onDisplayNameChange,
+                        placeholder = "Your name",
                         singleLine = true,
-                        shape = RoundedCornerShape(8.dp),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                        keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) }),
                         modifier = Modifier.fillMaxWidth()
                     )
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
 
-                    if (BuildConfig.DEBUG) {
-                        Text(
-                            text = "Quick Gmail profiles:",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outline
+                // Email field
+                TulsiTextField(
+                    value = uiState.email,
+                    onValueChange = onEmailChange,
+                    placeholder = "Email address",
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Email,
+                        imeAction = ImeAction.Next
+                    ),
+                    keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) }),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Password field
+                TulsiTextField(
+                    value = uiState.password,
+                    onValueChange = onPasswordChange,
+                    placeholder = "Password",
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Password,
+                        imeAction = ImeAction.Done
+                    ),
+                    keyboardActions = KeyboardActions(onDone = {
+                        focusManager.clearFocus()
+                        onSubmit()
+                    }),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // Error message
+                if (!uiState.errorMessage.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = uiState.errorMessage,
+                        fontSize = 14.sp,
+                        color = colors.statusMissed,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // Solid primary button ("Sign in" / "Create account")
+                TulsiButton(
+                    text = if (uiState.isSignUp) "Create account" else "Sign in",
+                    onClick = {
+                        focusManager.clearFocus()
+                        onSubmit()
+                    },
+                    isLoading = uiState.isLoading,
+                    enabled = !uiState.isLoading && !isGoogleLoading,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Text link to switch mode
+                TulsiTextButton(
+                    text = if (uiState.isSignUp) "Already have an account? Sign in" else "Create account",
+                    onClick = onToggleMode,
+                    textColor = colors.textSecondary
+                )
+            }
+
+            // Developer test accounts: ONLY rendered under BuildConfig.DEBUG, never in release builds
+            if (BuildConfig.DEBUG) {
+                Spacer(modifier = Modifier.height(32.dp))
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .clickable { showDevAccounts = !showDevAccounts }
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Code,
+                            contentDescription = null,
+                            tint = colors.textDisabled,
+                            modifier = Modifier.size(16.dp)
                         )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Developer: test accounts",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = colors.textDisabled
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            imageVector = if (showDevAccounts) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = null,
+                            tint = colors.textDisabled,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
 
+                    AnimatedVisibility(
+                        visible = showDevAccounts,
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically()
+                    ) {
                         Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            SuggestionChip(
-                                onClick = {
-                                    viewModel.signInWithGmailDirect("sharma.family@gmail.com", "Sharma Family")
-                                },
-                                label = { Text("sharma.family@gmail.com", style = MaterialTheme.typography.labelSmall) }
+                            TulsiOutlinedButton(
+                                text = "Asha (Admin)",
+                                onClick = { onQuickSignIn("ADMIN") },
+                                modifier = Modifier.weight(1f)
+                            )
+                            TulsiOutlinedButton(
+                                text = "Ravi (Patient)",
+                                onClick = { onQuickSignIn("PATIENT") },
+                                modifier = Modifier.weight(1f)
+                            )
+                            TulsiOutlinedButton(
+                                text = "Meera",
+                                onClick = { onQuickSignIn("MEMBER") },
+                                modifier = Modifier.weight(1f)
                             )
                         }
                     }
                 }
-            },
-            confirmButton = {
-                Button(
-                    onClick = { viewModel.signInWithGmailDirect() },
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryTeal),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text("Sign in with Gmail")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { viewModel.showDirectGmailDialog(false) }) {
-                    Text("Cancel")
-                }
             }
+        }
+    }
+}
+
+/**
+ * Native Credential Manager sign-in helper:
+ * - Uses GetGoogleIdOption with serverClientId
+ * - Attempts setFilterByAuthorizedAccounts(true) first
+ * - Falls back to setFilterByAuthorizedAccounts(false) to show native Google account bottom-sheet picker
+ * - Catches cancellation silently, returns friendly messages on network/no-account errors
+ */
+private suspend fun launchCredentialManagerGoogleSignIn(
+    context: Context,
+    onIdTokenReceived: (String) -> Unit,
+    onError: (String) -> Unit,
+    onComplete: () -> Unit
+) {
+    try {
+        val serverClientId = context.getString(R.string.default_web_client_id)
+        if (serverClientId.isBlank()) {
+            onError("Google Web Client ID is not configured. Please add SHA-1 to Firebase and update google-services.json.")
+            return
+        }
+
+        val credentialManager = CredentialManager.create(context)
+
+        var credentialResponse: GetCredentialResponse? = null
+
+        // 1. Try authorized accounts first
+        try {
+            val authorizedOption = GetGoogleIdOption.Builder()
+                .setFilterByAuthorizedAccounts(true)
+                .setServerClientId(serverClientId)
+                .setAutoSelectEnabled(true)
+                .build()
+
+            val request = GetCredentialRequest.Builder()
+                .addCredentialOption(authorizedOption)
+                .build()
+
+            credentialResponse = credentialManager.getCredential(
+                request = request,
+                context = context
+            )
+        } catch (e: GetCredentialCancellationException) {
+            // User cancelled; exit quietly
+            return
+        } catch (_: Exception) {
+            // Fallback: Retry with filterByAuthorizedAccounts = false to display the native account picker
+            try {
+                val allAccountsOption = GetGoogleIdOption.Builder()
+                    .setFilterByAuthorizedAccounts(false)
+                    .setServerClientId(serverClientId)
+                    .setAutoSelectEnabled(false)
+                    .build()
+
+                val requestAll = GetCredentialRequest.Builder()
+                    .addCredentialOption(allAccountsOption)
+                    .build()
+
+                credentialResponse = credentialManager.getCredential(
+                    request = requestAll,
+                    context = context
+                )
+            } catch (e2: GetCredentialCancellationException) {
+                // User cancelled account picker; exit quietly
+                return
+            } catch (e2: NoCredentialException) {
+                onError("No Google account found on device.")
+                return
+            } catch (e2: Exception) {
+                val msg = e2.localizedMessage ?: "Google sign in failed."
+                onError(if (msg.contains("network", ignoreCase = true)) "Network connection error." else msg)
+                return
+            }
+        }
+
+        val credential = credentialResponse?.credential
+        if (credential is CustomCredential && credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+            val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
+            onIdTokenReceived(googleIdTokenCredential.idToken)
+        } else {
+            onError("Unable to retrieve Google credentials.")
+        }
+    } catch (e: Exception) {
+        val msg = e.localizedMessage ?: "Authentication error."
+        onError(msg)
+    } finally {
+        onComplete()
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Previews for Light theme, Dark theme, and 1.5x Font Scale
+// -----------------------------------------------------------------------------
+
+@Preview(name = "Light Mode", showBackground = true)
+@Composable
+fun AuthScreenPreviewLight() {
+    TulsiTheme(darkTheme = false) {
+        AuthScreenContent(
+            uiState = AuthUiState(),
+            isGoogleLoading = false,
+            onGoogleSignInClick = {},
+            onEmailChange = {},
+            onPasswordChange = {},
+            onDisplayNameChange = {},
+            onSubmit = {},
+            onToggleMode = {},
+            onQuickSignIn = {}
+        )
+    }
+}
+
+@Preview(name = "Dark Mode", showBackground = true)
+@Composable
+fun AuthScreenPreviewDark() {
+    TulsiTheme(darkTheme = true) {
+        AuthScreenContent(
+            uiState = AuthUiState(),
+            isGoogleLoading = false,
+            onGoogleSignInClick = {},
+            onEmailChange = {},
+            onPasswordChange = {},
+            onDisplayNameChange = {},
+            onSubmit = {},
+            onToggleMode = {},
+            onQuickSignIn = {}
+        )
+    }
+}
+
+@Preview(name = "1.5x Font Scale", fontScale = 1.5f, showBackground = true)
+@Composable
+fun AuthScreenPreviewLargeFont() {
+    TulsiTheme(darkTheme = false) {
+        AuthScreenContent(
+            uiState = AuthUiState(),
+            isGoogleLoading = false,
+            onGoogleSignInClick = {},
+            onEmailChange = {},
+            onPasswordChange = {},
+            onDisplayNameChange = {},
+            onSubmit = {},
+            onToggleMode = {},
+            onQuickSignIn = {}
         )
     }
 }

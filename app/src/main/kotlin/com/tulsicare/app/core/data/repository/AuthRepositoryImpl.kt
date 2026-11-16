@@ -165,13 +165,41 @@ class AuthRepositoryImpl @Inject constructor(
         val credential = GoogleAuthProvider.getCredential(idToken, null)
         val result = auth.signInWithCredential(credential).await()
         val firebaseUser = result.user ?: throw IllegalStateException("Firebase user is null after Google sign in")
-        val user = getCurrentUser() ?: User(
-            id = firebaseUser.uid,
-            displayName = firebaseUser.displayName.orEmpty().ifBlank { "Google User" },
-            email = firebaseUser.email.orEmpty(),
-            phoneNumber = firebaseUser.phoneNumber.orEmpty()
-        )
-        fcmTokenManager.registerCurrentToken(firebaseUser.uid)
+        val googleDisplayName = firebaseUser.displayName.orEmpty().ifBlank { "User" }
+        val googleEmail = firebaseUser.email.orEmpty()
+
+        val userDocRef = firestore.collection("users").document(firebaseUser.uid)
+        val doc = try { userDocRef.get().await() } catch (_: Exception) { null }
+        val user = if (doc != null && doc.exists()) {
+            val existing = doc.toObject(User::class.java)?.copy(id = firebaseUser.uid) ?: User(
+                id = firebaseUser.uid,
+                displayName = googleDisplayName,
+                email = googleEmail
+            )
+            if (existing.displayName.isBlank() || existing.email.isBlank()) {
+                val updated = existing.copy(
+                    displayName = if (existing.displayName.isNotBlank()) existing.displayName else googleDisplayName,
+                    email = if (existing.email.isNotBlank()) existing.email else googleEmail
+                )
+                try { userDocRef.set(updated, SetOptions.merge()).await() } catch (_: Exception) {}
+                updated
+            } else {
+                existing
+            }
+        } else {
+            val newUser = User(
+                id = firebaseUser.uid,
+                displayName = googleDisplayName,
+                email = googleEmail,
+                phoneNumber = firebaseUser.phoneNumber.orEmpty()
+            )
+            try { userDocRef.set(newUser).await() } catch (_: Exception) {}
+            newUser
+        }
+
+        try {
+            fcmTokenManager.registerCurrentToken(firebaseUser.uid)
+        } catch (_: Exception) {}
         user
     }
 

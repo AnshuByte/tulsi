@@ -1,58 +1,108 @@
-﻿package com.tulsicare.app.core.designsystem
+package com.tulsicare.app.core.designsystem
 
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
-// Primary Brand Colors
-val PrimaryTeal = Color(0xFF0F9D8A)
-val PrimaryTealLight = Color(0xFF35BBA7)
-val PrimaryTealDark = Color(0xFF087263)
+// --- Light Theme Tokens ---
+val LightBackground = Color(0xFFFFFFFF)
+val LightSurface = Color(0xFFF6F6F6)
+val LightBorder = Color(0xFFE4E4E4)
+val LightTextPrimary = Color(0xFF0A0A0A)
+val LightTextSecondary = Color(0xFF6B6B6B)
+val LightTextDisabled = Color(0xFFA8A8A8)
+val LightButtonPrimary = Color(0xFF0A0A0A)
+val LightButtonText = Color(0xFFFFFFFF)
 
-val DeepNavy = Color(0xFF12304A)
-val DeepNavyLight = Color(0xFF1F4A70)
-val NavyMuted = Color(0xFF4A6277)
+// --- Dark Theme Tokens ---
+val DarkBackground = Color(0xFF000000)
+val DarkSurface = Color(0xFF111111)
+val DarkBorder = Color(0xFF262626)
+val DarkTextPrimary = Color(0xFFFAFAFA)
+val DarkTextSecondary = Color(0xFF9A9A9A)
+val DarkTextDisabled = Color(0xFF555555)
+val DarkButtonPrimary = Color(0xFFFFFFFF)
+val DarkButtonText = Color(0xFF000000)
 
-val SoftBackground = Color(0xFFF6FAF9)
-val PureWhite = Color(0xFFFFFFFF)
-val SurfaceTintTeal = Color(0xFFE9F6F4)
+// --- Accent: Tulsi Green (Used ONLY for leaf logo, selected state, and Taken status) ---
+val TulsiGreenLight = Color(0xFF1F7A5C)
+val TulsiGreenDark = Color(0xFF3DBE8B)
 
-// Semantic Status Colors
-val StatusTakenGreen = Color(0xFF2E9E5B)
-val StatusTakenGreenLight = Color(0xFFE4F7EC)
+// --- Semantic Status Colors (Dots & text only - NEVER filled card backgrounds) ---
+val StatusMissed = Color(0xFFD64545)
+val StatusSnoozed = Color(0xFFC98A1B)
 
-val StatusSnoozeAmber = Color(0xFFF2A93B)
-val StatusSnoozeAmberLight = Color(0xFFFEF5E7)
+// Aliases for any remaining legacy references
+val PrimaryTeal = TulsiGreenLight
+val PrimaryTealLight = TulsiGreenLight
+val PrimaryTealDark = TulsiGreenLight
+val DeepNavy = LightTextPrimary
+val DeepNavyLight = LightTextPrimary
+val NavyMuted = LightTextSecondary
+val SoftBackground = LightBackground
+val PureWhite = LightBackground
+val SurfaceTintTeal = LightSurface
+val StatusTakenGreen = TulsiGreenLight
+val StatusTakenGreenLight = LightSurface
+val StatusSnoozeAmber = StatusSnoozed
+val StatusSnoozeAmberLight = LightSurface
+val StatusMissedCoral = StatusMissed
+val StatusMissedCoralLight = LightSurface
+val StatusSkippedGrey = LightTextSecondary
+val StatusSkippedGreyLight = LightSurface
 
-val StatusMissedCoral = Color(0xFFF26B5B)
-val StatusMissedCoralLight = Color(0xFFFDECEB)
+@Immutable
+data class TulsiColors(
+    val background: Color,
+    val surface: Color,
+    val border: Color,
+    val textPrimary: Color,
+    val textSecondary: Color,
+    val textDisabled: Color,
+    val buttonPrimary: Color,
+    val buttonText: Color,
+    val accent: Color,
+    val statusTaken: Color,
+    val statusMissed: Color = StatusMissed,
+    val statusSnoozed: Color = StatusSnoozed,
+    val statusSkipped: Color,
+    val isDark: Boolean
+)
 
-val StatusSkippedGrey = Color(0xFF8A97A3)
-val StatusSkippedGreyLight = Color(0xFFF0F3F5)
-
-// Dark Theme Variants
-val DarkBackground = Color(0xFF0D1B26)
-val DarkSurface = Color(0xFF152635)
-val DarkSurfaceVariant = Color(0xFF1D3447)
-val DarkTextPrimary = Color(0xFFF0F5F8)
-val DarkTextSecondary = Color(0xFFA1B4C3)
-val DarkTealPrimary = Color(0xFF14B8A0)
+val LocalTulsiColors = staticCompositionLocalOf {
+    TulsiColors(
+        background = LightBackground,
+        surface = LightSurface,
+        border = LightBorder,
+        textPrimary = LightTextPrimary,
+        textSecondary = LightTextSecondary,
+        textDisabled = LightTextDisabled,
+        buttonPrimary = LightButtonPrimary,
+        buttonText = LightButtonText,
+        accent = TulsiGreenLight,
+        statusTaken = TulsiGreenLight,
+        statusMissed = StatusMissed,
+        statusSnoozed = StatusSnoozed,
+        statusSkipped = LightTextSecondary,
+        isDark = false
+    )
+}
 
 /**
- * Custom semantic colors for tulsi adherence & status tags
+ * Backward compatibility class for any legacy theme lookups
  */
 @Immutable
 data class tulsiSemanticColors(
-    val taken: Color = StatusTakenGreen,
-    val takenContainer: Color = StatusTakenGreenLight,
-    val snooze: Color = StatusSnoozeAmber,
-    val snoozeContainer: Color = StatusSnoozeAmberLight,
-    val missed: Color = StatusMissedCoral,
-    val missedContainer: Color = StatusMissedCoralLight,
-    val skipped: Color = StatusSkippedGrey,
-    val skippedContainer: Color = StatusSkippedGreyLight,
-    val deepNavy: Color = DeepNavy,
-    val softBackground: Color = SoftBackground
+    val taken: Color = TulsiGreenLight,
+    val takenContainer: Color = LightSurface,
+    val snooze: Color = StatusSnoozed,
+    val snoozeContainer: Color = LightSurface,
+    val missed: Color = StatusMissed,
+    val missedContainer: Color = LightSurface,
+    val skipped: Color = LightTextSecondary,
+    val skippedContainer: Color = LightSurface,
+    val deepNavy: Color = LightTextPrimary,
+    val softBackground: Color = LightBackground
 )
 
 val LocaltulsiSemanticColors = staticCompositionLocalOf { tulsiSemanticColors() }

@@ -1,4 +1,4 @@
-﻿package com.tulsicare.app.core.designsystem
+package com.tulsicare.app.core.designsystem
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
@@ -15,85 +15,61 @@ val googleFontProvider = GoogleFont.Provider(
     certificates = R.array.com_google_android_gms_fonts_certs
 )
 
-val poppinsFont = GoogleFont("Poppins")
 val interFont = GoogleFont("Inter")
 
-val PoppinsFamily = FontFamily(
-    Font(googleFont = poppinsFont, fontProvider = googleFontProvider, weight = FontWeight.Normal),
-    Font(googleFont = poppinsFont, fontProvider = googleFontProvider, weight = FontWeight.Medium),
-    Font(googleFont = poppinsFont, fontProvider = googleFontProvider, weight = FontWeight.SemiBold),
-    Font(googleFont = poppinsFont, fontProvider = googleFontProvider, weight = FontWeight.Bold)
-)
-
+// Single font family: Inter (Weights 400, 500, 600 only)
 val InterFamily = FontFamily(
     Font(googleFont = interFont, fontProvider = googleFontProvider, weight = FontWeight.Normal),
     Font(googleFont = interFont, fontProvider = googleFontProvider, weight = FontWeight.Medium),
     Font(googleFont = interFont, fontProvider = googleFontProvider, weight = FontWeight.SemiBold)
 )
 
-// Brand Typography: Poppins for headings, Inter for body (min 16sp for body text)
+// Legacy alias for compatibility during migration
+val PoppinsFamily = InterFamily
+
+/**
+ * Tulsi Minimalist Typography (Inter only: 28sp title, 20sp section, 16sp body, 14sp caption)
+ */
 val tulsiTypography = Typography(
-    displayLarge = TextStyle(
-        fontFamily = PoppinsFamily,
-        fontWeight = FontWeight.Bold,
-        fontSize = 32.sp,
-        lineHeight = 40.sp,
+    // 28sp Title (Weight 600)
+    displayMedium = TextStyle(
+        fontFamily = InterFamily,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 28.sp,
+        lineHeight = 34.sp,
         letterSpacing = (-0.5).sp
     ),
-    displayMedium = TextStyle(
-        fontFamily = PoppinsFamily,
-        fontWeight = FontWeight.Bold,
-        fontSize = 28.sp,
-        lineHeight = 36.sp
-    ),
-    displaySmall = TextStyle(
-        fontFamily = PoppinsFamily,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 24.sp,
-        lineHeight = 32.sp
-    ),
     headlineLarge = TextStyle(
-        fontFamily = PoppinsFamily,
+        fontFamily = InterFamily,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 22.sp,
-        lineHeight = 28.sp
+        fontSize = 28.sp,
+        lineHeight = 34.sp
     ),
+    // 20sp Section (Weight 600)
     headlineMedium = TextStyle(
-        fontFamily = PoppinsFamily,
+        fontFamily = InterFamily,
         fontWeight = FontWeight.SemiBold,
         fontSize = 20.sp,
         lineHeight = 26.sp
     ),
-    headlineSmall = TextStyle(
-        fontFamily = PoppinsFamily,
-        fontWeight = FontWeight.Medium,
-        fontSize = 18.sp,
-        lineHeight = 24.sp
-    ),
     titleLarge = TextStyle(
-        fontFamily = PoppinsFamily,
+        fontFamily = InterFamily,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 18.sp,
-        lineHeight = 24.sp
+        fontSize = 20.sp,
+        lineHeight = 26.sp
     ),
     titleMedium = TextStyle(
-        fontFamily = PoppinsFamily,
+        fontFamily = InterFamily,
         fontWeight = FontWeight.Medium,
         fontSize = 16.sp,
         lineHeight = 22.sp
     ),
-    titleSmall = TextStyle(
-        fontFamily = PoppinsFamily,
-        fontWeight = FontWeight.Medium,
-        fontSize = 14.sp,
-        lineHeight = 20.sp
-    ),
-    // Body text: Minimum 16sp as required for accessibility and warmth
+    // 16sp Body (Weight 400/500)
     bodyLarge = TextStyle(
         fontFamily = InterFamily,
         fontWeight = FontWeight.Normal,
-        fontSize = 18.sp,
-        lineHeight = 26.sp
+        fontSize = 16.sp,
+        lineHeight = 24.sp
     ),
     bodyMedium = TextStyle(
         fontFamily = InterFamily,
@@ -101,6 +77,7 @@ val tulsiTypography = Typography(
         fontSize = 16.sp,
         lineHeight = 24.sp
     ),
+    // 14sp Caption (Weight 400/500)
     bodySmall = TextStyle(
         fontFamily = InterFamily,
         fontWeight = FontWeight.Normal,
@@ -121,8 +98,8 @@ val tulsiTypography = Typography(
     ),
     labelSmall = TextStyle(
         fontFamily = InterFamily,
-        fontWeight = FontWeight.Medium,
-        fontSize = 12.sp,
-        lineHeight = 16.sp
+        fontWeight = FontWeight.Normal,
+        fontSize = 14.sp,
+        lineHeight = 18.sp
     )
 )

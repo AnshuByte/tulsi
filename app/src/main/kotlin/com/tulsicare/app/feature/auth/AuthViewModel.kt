@@ -19,9 +19,7 @@ data class AuthUiState(
     val isSignUp: Boolean = false,
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
-    val currentUser: User? = null,
-    val showDirectGmailDialog: Boolean = false,
-    val directGmailInput: String = ""
+    val currentUser: User? = null
 )
 
 @HiltViewModel
@@ -44,8 +42,7 @@ class AuthViewModel @Inject constructor(
     fun setPassword(password: String) = _uiState.update { it.copy(password = password, errorMessage = null) }
     fun setDisplayName(name: String) = _uiState.update { it.copy(displayName = name, errorMessage = null) }
     fun toggleAuthMode() = _uiState.update { it.copy(isSignUp = !it.isSignUp, errorMessage = null) }
-    fun showDirectGmailDialog(show: Boolean) = _uiState.update { it.copy(showDirectGmailDialog = show, errorMessage = null) }
-    fun setDirectGmailInput(input: String) = _uiState.update { it.copy(directGmailInput = input, errorMessage = null) }
+    fun setErrorMessage(message: String?) = _uiState.update { it.copy(errorMessage = message) }
 
     fun submit() {
         val state = _uiState.value
@@ -74,7 +71,12 @@ class AuthViewModel @Inject constructor(
                     _uiState.update { it.copy(isLoading = false, currentUser = user) }
                 },
                 onFailure = { error ->
-                    _uiState.update { it.copy(isLoading = false, errorMessage = error.localizedMessage ?: "Authentication failed") }
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            errorMessage = error.localizedMessage ?: "Authentication failed"
+                        )
+                    }
                 }
             )
         }
@@ -89,34 +91,12 @@ class AuthViewModel @Inject constructor(
                     _uiState.update { it.copy(isLoading = false, currentUser = user) }
                 },
                 onFailure = { error ->
-                    _uiState.update { it.copy(isLoading = false, errorMessage = error.localizedMessage ?: "Google sign in failed") }
-                }
-            )
-        }
-    }
-
-    fun signInWithGmailDirect(email: String? = null, displayName: String = "") {
-        val targetEmail = email?.trim() ?: _uiState.value.directGmailInput.trim()
-        if (targetEmail.isBlank()) {
-            _uiState.update { it.copy(errorMessage = "Please enter your Gmail address") }
-            return
-        }
-
-        val fullEmail = if (!targetEmail.contains("@")) {
-            "$targetEmail@gmail.com"
-        } else {
-            targetEmail
-        }
-
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
-            val result = authRepository.signInWithGmailDirect(fullEmail, displayName)
-            result.fold(
-                onSuccess = { user ->
-                    _uiState.update { it.copy(isLoading = false, currentUser = user, showDirectGmailDialog = false) }
-                },
-                onFailure = { error ->
-                    _uiState.update { it.copy(isLoading = false, errorMessage = error.localizedMessage ?: "Gmail sign in failed") }
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            errorMessage = error.localizedMessage ?: "Google sign in failed"
+                        )
+                    }
                 }
             )
         }
@@ -126,23 +106,27 @@ class AuthViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             val (email, password, name) = when (role) {
-                "ADMIN" -> Triple("test.asha@example.com", "TestPass123!", "Asha (Admin)")
-                "PATIENT" -> Triple("test.ravi@example.com", "TestPass123!", "Ravi (Elderly Patient)")
-                else -> Triple("test.meera@example.com", "TestPass123!", "Meera (Member)")
+                "ADMIN" -> Triple("test.asha@example.com", "TestPass123!", "Asha")
+                "PATIENT" -> Triple("test.ravi@example.com", "TestPass123!", "Ravi")
+                else -> Triple("test.meera@example.com", "TestPass123!", "Meera")
             }
 
             val signInResult = authRepository.signInWithEmail(email, password)
             if (signInResult.isSuccess) {
                 _uiState.update { it.copy(isLoading = false, currentUser = signInResult.getOrNull()) }
             } else {
-                // If account does not exist in Firebase Auth yet, auto-register it
                 val signUpResult = authRepository.signUpWithEmail(email, password, name)
                 signUpResult.fold(
                     onSuccess = { user ->
                         _uiState.update { it.copy(isLoading = false, currentUser = user) }
                     },
                     onFailure = { error ->
-                        _uiState.update { it.copy(isLoading = false, errorMessage = error.localizedMessage ?: "Quick sign-in failed") }
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                errorMessage = error.localizedMessage ?: "Quick sign-in failed"
+                            )
+                        }
                     }
                 )
             }

@@ -16,6 +16,8 @@ coroutines = "1.9.0"
 firebaseBom = "33.7.0"
 googleServices = "4.4.2"
 playServicesAuth = "21.3.0"
+credentials = "1.3.0"
+googleid = "1.1.1"
 junit = "4.13.2"
 androidxTestExt = "1.2.1"
 androidxTestEspresso = "3.6.1"
@@ -67,6 +69,11 @@ firebase-auth = { group = "com.google.firebase", name = "firebase-auth" }
 firebase-firestore = { group = "com.google.firebase", name = "firebase-firestore" }
 firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging" }
 play-services-auth = { module = "com.google.android.gms:play-services-auth", version.ref = "playServicesAuth" }
+
+# Credential Manager & Google Sign-In
+androidx-credentials = { module = "androidx.credentials:credentials", version.ref = "credentials" }
+androidx-credentials-play-services = { module = "androidx.credentials:credentials-play-services-auth", version.ref = "credentials" }
+google-identity-googleid = { module = "com.google.android.libraries.identity.googleid:googleid", version.ref = "googleid" }
 
 # Testing
 junit = { module = "junit:junit", version.ref = "junit" }

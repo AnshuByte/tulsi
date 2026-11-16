@@ -107,6 +107,11 @@ dependencies {
     implementation(libs.firebase.messaging)
     implementation(libs.play.services.auth)
 
+    // Credential Manager & Google Sign-In
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services)
+    implementation(libs.google.identity.googleid)
+
     // Testing
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.test.ext.junit)

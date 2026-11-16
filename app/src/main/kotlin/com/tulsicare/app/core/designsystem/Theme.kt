@@ -1,4 +1,4 @@
-﻿package com.tulsicare.app.core.designsystem
+package com.tulsicare.app.core.designsystem
 
 import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -9,82 +9,83 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.SideEffect
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 private val LightColorScheme = lightColorScheme(
-    primary = PrimaryTeal,
-    onPrimary = PureWhite,
-    primaryContainer = SurfaceTintTeal,
-    onPrimaryContainer = PrimaryTealDark,
-    secondary = DeepNavy,
-    onSecondary = PureWhite,
-    secondaryContainer = StatusSkippedGreyLight,
-    onSecondaryContainer = DeepNavy,
-    tertiary = StatusSnoozeAmber,
-    onTertiary = PureWhite,
-    background = SoftBackground,
-    onBackground = DeepNavy,
-    surface = PureWhite,
-    onSurface = DeepNavy,
-    surfaceVariant = SurfaceTintTeal,
-    onSurfaceVariant = NavyMuted,
-    error = StatusMissedCoral,
-    onError = PureWhite,
-    errorContainer = StatusMissedCoralLight,
-    onErrorContainer = StatusMissedCoral,
-    outline = StatusSkippedGrey
+    primary = LightButtonPrimary,
+    onPrimary = LightButtonText,
+    primaryContainer = LightSurface,
+    onPrimaryContainer = LightTextPrimary,
+    secondary = TulsiGreenLight,
+    onSecondary = LightButtonText,
+    secondaryContainer = LightSurface,
+    onSecondaryContainer = TulsiGreenLight,
+    background = LightBackground,
+    onBackground = LightTextPrimary,
+    surface = LightBackground,
+    onSurface = LightTextPrimary,
+    surfaceVariant = LightSurface,
+    onSurfaceVariant = LightTextSecondary,
+    outline = LightBorder,
+    outlineVariant = LightBorder,
+    error = StatusMissed,
+    onError = LightBackground
 )
 
 private val DarkColorScheme = darkColorScheme(
-    primary = DarkTealPrimary,
-    onPrimary = DarkBackground,
-    primaryContainer = DarkSurfaceVariant,
-    onPrimaryContainer = DarkTealPrimary,
-    secondary = DarkTextPrimary,
-    onSecondary = DarkBackground,
-    secondaryContainer = DarkSurfaceVariant,
-    onSecondaryContainer = DarkTextPrimary,
-    tertiary = StatusSnoozeAmber,
-    onTertiary = DarkBackground,
+    primary = DarkButtonPrimary,
+    onPrimary = DarkButtonText,
+    primaryContainer = DarkSurface,
+    onPrimaryContainer = DarkTextPrimary,
+    secondary = TulsiGreenDark,
+    onSecondary = DarkButtonText,
+    secondaryContainer = DarkSurface,
+    onSecondaryContainer = TulsiGreenDark,
     background = DarkBackground,
     onBackground = DarkTextPrimary,
-    surface = DarkSurface,
+    surface = DarkBackground,
     onSurface = DarkTextPrimary,
-    surfaceVariant = DarkSurfaceVariant,
+    surfaceVariant = DarkSurface,
     onSurfaceVariant = DarkTextSecondary,
-    error = StatusMissedCoral,
-    onError = PureWhite,
-    errorContainer = DarkSurfaceVariant,
-    onErrorContainer = StatusMissedCoral,
-    outline = NavyMuted
+    outline = DarkBorder,
+    outlineVariant = DarkBorder,
+    error = StatusMissed,
+    onError = DarkBackground
 )
 
-private val LightSemanticColors = tulsiSemanticColors(
-    taken = StatusTakenGreen,
-    takenContainer = StatusTakenGreenLight,
-    snooze = StatusSnoozeAmber,
-    snoozeContainer = StatusSnoozeAmberLight,
-    missed = StatusMissedCoral,
-    missedContainer = StatusMissedCoralLight,
-    skipped = StatusSkippedGrey,
-    skippedContainer = StatusSkippedGreyLight,
-    deepNavy = DeepNavy,
-    softBackground = SoftBackground
+private val LightTulsiColors = TulsiColors(
+    background = LightBackground,
+    surface = LightSurface,
+    border = LightBorder,
+    textPrimary = LightTextPrimary,
+    textSecondary = LightTextSecondary,
+    textDisabled = LightTextDisabled,
+    buttonPrimary = LightButtonPrimary,
+    buttonText = LightButtonText,
+    accent = TulsiGreenLight,
+    statusTaken = TulsiGreenLight,
+    statusMissed = StatusMissed,
+    statusSnoozed = StatusSnoozed,
+    statusSkipped = LightTextSecondary,
+    isDark = false
 )
 
-private val DarkSemanticColors = tulsiSemanticColors(
-    taken = StatusTakenGreen,
-    takenContainer = DarkSurfaceVariant,
-    snooze = StatusSnoozeAmber,
-    snoozeContainer = DarkSurfaceVariant,
-    missed = StatusMissedCoral,
-    missedContainer = DarkSurfaceVariant,
-    skipped = StatusSkippedGrey,
-    skippedContainer = DarkSurfaceVariant,
-    deepNavy = DarkTextPrimary,
-    softBackground = DarkBackground
+private val DarkTulsiColors = TulsiColors(
+    background = DarkBackground,
+    surface = DarkSurface,
+    border = DarkBorder,
+    textPrimary = DarkTextPrimary,
+    textSecondary = DarkTextSecondary,
+    textDisabled = DarkTextDisabled,
+    buttonPrimary = DarkButtonPrimary,
+    buttonText = DarkButtonText,
+    accent = TulsiGreenDark,
+    statusTaken = TulsiGreenDark,
+    statusMissed = StatusMissed,
+    statusSnoozed = StatusSnoozed,
+    statusSkipped = DarkTextSecondary,
+    isDark = true
 )
 
 @Composable
@@ -93,19 +94,32 @@ fun TulsiTheme(
     content: @Composable () -> Unit
 ) {
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
-    val semanticColors = if (darkTheme) DarkSemanticColors else LightSemanticColors
+    val tulsiColors = if (darkTheme) DarkTulsiColors else LightTulsiColors
+    val semanticColors = tulsiSemanticColors(
+        taken = tulsiColors.statusTaken,
+        takenContainer = tulsiColors.surface,
+        snooze = tulsiColors.statusSnoozed,
+        snoozeContainer = tulsiColors.surface,
+        missed = tulsiColors.statusMissed,
+        missedContainer = tulsiColors.surface,
+        skipped = tulsiColors.statusSkipped,
+        skippedContainer = tulsiColors.surface,
+        deepNavy = tulsiColors.textPrimary,
+        softBackground = tulsiColors.background
+    )
 
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as? Activity)?.window ?: return@SideEffect
-            // Use WindowCompat (edge-to-edge) instead of deprecated statusBarColor
             WindowCompat.setDecorFitsSystemWindows(window, false)
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
+            WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = !darkTheme
         }
     }
 
     CompositionLocalProvider(
+        LocalTulsiColors provides tulsiColors,
         LocaltulsiSemanticColors provides semanticColors
     ) {
         MaterialTheme(
@@ -118,6 +132,11 @@ fun TulsiTheme(
 }
 
 object TulsiTheme {
+    val colors: TulsiColors
+        @Composable
+        @ReadOnlyComposable
+        get() = LocalTulsiColors.current
+
     val semanticColors: tulsiSemanticColors
         @Composable
         @ReadOnlyComposable
