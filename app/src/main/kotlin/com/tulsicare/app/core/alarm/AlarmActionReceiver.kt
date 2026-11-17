@@ -12,7 +12,6 @@ import com.google.firebase.auth.FirebaseAuth
 import com.tulsicare.app.R
 import com.tulsicare.app.TulsiApp
 import com.tulsicare.app.core.data.repository.DoseEventRepository
-import com.tulsicare.app.core.database.dao.MedicineDao
 import com.tulsicare.app.core.model.DoseStatus
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
@@ -28,7 +27,6 @@ class AlarmActionReceiver : BroadcastReceiver() {
     @InstallIn(SingletonComponent::class)
     interface ActionEntryPoint {
         fun doseEventRepository(): DoseEventRepository
-        fun medicineDao(): MedicineDao
         fun auth(): FirebaseAuth
     }
 

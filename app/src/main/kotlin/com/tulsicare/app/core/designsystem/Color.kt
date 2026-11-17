@@ -32,25 +32,6 @@ val TulsiGreenDark = Color(0xFF3DBE8B)
 val StatusMissed = Color(0xFFD64545)
 val StatusSnoozed = Color(0xFFC98A1B)
 
-// Aliases for any remaining legacy references
-val PrimaryTeal = TulsiGreenLight
-val PrimaryTealLight = TulsiGreenLight
-val PrimaryTealDark = TulsiGreenLight
-val DeepNavy = LightTextPrimary
-val DeepNavyLight = LightTextPrimary
-val NavyMuted = LightTextSecondary
-val SoftBackground = LightBackground
-val PureWhite = LightBackground
-val SurfaceTintTeal = LightSurface
-val StatusTakenGreen = TulsiGreenLight
-val StatusTakenGreenLight = LightSurface
-val StatusSnoozeAmber = StatusSnoozed
-val StatusSnoozeAmberLight = LightSurface
-val StatusMissedCoral = StatusMissed
-val StatusMissedCoralLight = LightSurface
-val StatusSkippedGrey = LightTextSecondary
-val StatusSkippedGreyLight = LightSurface
-
 @Immutable
 data class TulsiColors(
     val background: Color,
@@ -87,22 +68,3 @@ val LocalTulsiColors = staticCompositionLocalOf {
         isDark = false
     )
 }
-
-/**
- * Backward compatibility class for any legacy theme lookups
- */
-@Immutable
-data class tulsiSemanticColors(
-    val taken: Color = TulsiGreenLight,
-    val takenContainer: Color = LightSurface,
-    val snooze: Color = StatusSnoozed,
-    val snoozeContainer: Color = LightSurface,
-    val missed: Color = StatusMissed,
-    val missedContainer: Color = LightSurface,
-    val skipped: Color = LightTextSecondary,
-    val skippedContainer: Color = LightSurface,
-    val deepNavy: Color = LightTextPrimary,
-    val softBackground: Color = LightBackground
-)
-
-val LocaltulsiSemanticColors = staticCompositionLocalOf { tulsiSemanticColors() }

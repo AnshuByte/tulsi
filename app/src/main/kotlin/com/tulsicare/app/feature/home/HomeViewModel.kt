@@ -334,10 +334,6 @@ class HomeViewModel @Inject constructor(
             putExtra(AlarmReceiver.EXTRA_DOSE_ID, "test_schedule")
             putExtra(AlarmReceiver.EXTRA_SCHEDULED_AT, scheduledAt)
         }
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            androidx.core.content.ContextCompat.startForegroundService(context, serviceIntent)
-        } else {
-            context.startService(serviceIntent)
-        }
+        androidx.core.content.ContextCompat.startForegroundService(context, serviceIntent)
     }
 }

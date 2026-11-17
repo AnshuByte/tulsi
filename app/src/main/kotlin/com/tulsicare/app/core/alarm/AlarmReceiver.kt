@@ -6,7 +6,6 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -245,11 +244,7 @@ class AlarmReceiver : BroadcastReceiver() {
             putExtra(EXTRA_PERSON_NAME, personName)
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            ContextCompat.startForegroundService(context, serviceIntent)
-        } else {
-            context.startService(serviceIntent)
-        }
+        ContextCompat.startForegroundService(context, serviceIntent)
 
         // Check if unlocked and in active use:
         val keyguardManager = context.getSystemService<KeyguardManager>()

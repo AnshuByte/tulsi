@@ -16,7 +16,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.tulsicare.app.core.designsystem.TulsiBorderWidth
 import com.tulsicare.app.core.designsystem.TulsiCornerRadius
 import com.tulsicare.app.core.designsystem.TulsiTheme
 

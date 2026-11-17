@@ -95,18 +95,6 @@ fun TulsiTheme(
 ) {
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
     val tulsiColors = if (darkTheme) DarkTulsiColors else LightTulsiColors
-    val semanticColors = tulsiSemanticColors(
-        taken = tulsiColors.statusTaken,
-        takenContainer = tulsiColors.surface,
-        snooze = tulsiColors.statusSnoozed,
-        snoozeContainer = tulsiColors.surface,
-        missed = tulsiColors.statusMissed,
-        missedContainer = tulsiColors.surface,
-        skipped = tulsiColors.statusSkipped,
-        skippedContainer = tulsiColors.surface,
-        deepNavy = tulsiColors.textPrimary,
-        softBackground = tulsiColors.background
-    )
 
     val view = LocalView.current
     if (!view.isInEditMode) {
@@ -119,8 +107,7 @@ fun TulsiTheme(
     }
 
     CompositionLocalProvider(
-        LocalTulsiColors provides tulsiColors,
-        LocaltulsiSemanticColors provides semanticColors
+        LocalTulsiColors provides tulsiColors
     ) {
         MaterialTheme(
             colorScheme = colorScheme,
@@ -136,9 +123,4 @@ object TulsiTheme {
         @Composable
         @ReadOnlyComposable
         get() = LocalTulsiColors.current
-
-    val semanticColors: tulsiSemanticColors
-        @Composable
-        @ReadOnlyComposable
-        get() = LocaltulsiSemanticColors.current
 }

@@ -24,9 +24,6 @@ val InterFamily = FontFamily(
     Font(googleFont = interFont, fontProvider = googleFontProvider, weight = FontWeight.SemiBold)
 )
 
-// Legacy alias for compatibility during migration
-val PoppinsFamily = InterFamily
-
 /**
  * Tulsi Minimalist Typography (Inter only: 28sp title, 20sp section, 16sp body, 14sp caption)
  */

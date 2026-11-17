@@ -2,7 +2,6 @@ package com.tulsicare.app.core.messaging
 
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.core.app.NotificationCompat
@@ -25,7 +24,7 @@ class TulsiMessagingService : FirebaseMessagingService() {
     override fun onNewToken(token: String) {
         super.onNewToken(token)
         serviceScope.launch {
-            FcmTokenManager.updateToken(applicationContext, token)
+            FcmTokenManager.updateToken(token)
         }
     }
 

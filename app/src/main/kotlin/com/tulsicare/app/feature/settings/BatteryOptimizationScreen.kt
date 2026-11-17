@@ -4,7 +4,6 @@ import android.Manifest
 import android.app.AlarmManager
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
@@ -33,10 +32,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.outlined.BatteryAlert
-import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Notifications
-import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -53,14 +49,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
@@ -68,11 +62,8 @@ import com.tulsicare.app.core.designsystem.TulsiBorderWidth
 import com.tulsicare.app.core.designsystem.TulsiCornerRadius
 import com.tulsicare.app.core.designsystem.TulsiScreenPadding
 import com.tulsicare.app.core.designsystem.TulsiTheme
-import com.tulsicare.app.core.designsystem.component.TulsiButton
-import com.tulsicare.app.core.designsystem.component.TulsiListRow
 import com.tulsicare.app.core.designsystem.component.TulsiOutlinedButton
 import com.tulsicare.app.core.designsystem.component.TulsiSectionHeader
-import com.tulsicare.app.core.designsystem.component.TulsiStatusDot
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -102,11 +93,7 @@ fun BatteryOptimizationScreen(
 
         // 3. Battery Optimizations
         val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
-        isBatteryIgnoringOptimizations = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            powerManager?.isIgnoringBatteryOptimizations(context.packageName) == true
-        } else {
-            true
-        }
+        isBatteryIgnoringOptimizations = powerManager?.isIgnoringBatteryOptimizations(context.packageName) == true
     }
 
     LaunchedEffect(lifecycleOwner) {
@@ -230,12 +217,10 @@ fun BatteryOptimizationScreen(
                     title = "Battery optimization",
                     isAllowed = isBatteryIgnoringOptimizations,
                     onFix = {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                                data = Uri.parse("package:${context.packageName}")
-                            }
-                            context.startActivity(intent)
+                        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                            data = Uri.parse("package:${context.packageName}")
                         }
+                        context.startActivity(intent)
                     }
                 )
                 HorizontalDivider(thickness = TulsiBorderWidth, color = colors.border)

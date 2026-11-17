@@ -27,7 +27,6 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.tulsicare.app.core.designsystem.TulsiTheme
 import com.tulsicare.app.core.designsystem.component.TulsiBottomNavBar
-import com.tulsicare.app.core.designsystem.component.TulsiNavTab
 import com.tulsicare.app.feature.auth.AuthScreen
 import com.tulsicare.app.feature.auth.AuthViewModel
 import com.tulsicare.app.feature.family.FamilyGroupScreen

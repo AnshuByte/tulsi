@@ -5,7 +5,6 @@ import androidx.compose.material3.Shapes
 import androidx.compose.ui.unit.dp
 
 // Tulsi Spacing and Dimensions Tokens
-val TulsiGrid = 8.dp
 val TulsiScreenPadding = 20.dp
 val TulsiCornerRadius = 12.dp
 val TulsiBorderWidth = 1.dp

@@ -1,6 +1,5 @@
 package com.tulsicare.app.feature.medicine
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -12,7 +11,6 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
@@ -62,6 +60,7 @@ import androidx.compose.ui.unit.sp
 import com.tulsicare.app.core.model.MedicineForm
 import com.tulsicare.app.core.model.ScheduleType
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 val TulsiGreen = Color(0xFF3ECF8E)
 val TulsiFieldBg = Color(0xFF222222)
@@ -649,7 +648,7 @@ fun AddMedicineBottomSheet(
         TimePickerModal(
             onDismiss = { showTimePickerModal = false },
             onConfirm = { hour, minute ->
-                val formatted = String.format("%02d:%02d", hour, minute)
+                val formatted = String.format(Locale.ROOT, "%02d:%02d", hour, minute)
                 viewModel.addTime(formatted)
                 showTimePickerModal = false
             }

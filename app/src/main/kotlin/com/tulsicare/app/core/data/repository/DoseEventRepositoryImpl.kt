@@ -10,7 +10,6 @@ import com.tulsicare.app.core.model.DoseEvent
 import com.tulsicare.app.core.model.DoseStatus
 import com.tulsicare.app.core.model.ScheduleType
 import com.tulsicare.app.core.model.generateDoseId
-import com.tulsicare.app.core.network.PushRelayClient
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
@@ -38,7 +37,6 @@ class DoseEventRepositoryImpl @Inject constructor(
     private val medicineDao: MedicineDao,
     private val scheduleDao: ScheduleDao,
     private val firestore: FirebaseFirestore,
-    private val pushRelayClient: PushRelayClient,
     private val firestoreListenerManager: FirestoreListenerManager
 ) : DoseEventRepository {
 

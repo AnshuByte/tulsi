@@ -1,6 +1,5 @@
 package com.tulsicare.app.core.messaging
 
-import android.content.Context
 import android.os.Build
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
@@ -73,7 +72,7 @@ class FcmTokenManager @Inject constructor(
     }
 
     companion object {
-        suspend fun updateToken(context: Context, token: String) {
+        suspend fun updateToken(token: String) {
             val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: return
             val firestore = FirebaseFirestore.getInstance()
             val deviceName = "${Build.MANUFACTURER} ${Build.MODEL}"
@@ -89,21 +88,6 @@ class FcmTokenManager @Inject constructor(
                     .collection("fcmTokens")
                     .document(token)
                     .set(tokenData)
-                    .await()
-            } catch (_: Exception) {
-            }
-        }
-
-        suspend fun removeStaleToken(token: String) {
-            val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: return
-            val firestore = FirebaseFirestore.getInstance()
-
-            try {
-                firestore.collection("users")
-                    .document(currentUserId)
-                    .collection("fcmTokens")
-                    .document(token)
-                    .delete()
                     .await()
             } catch (_: Exception) {
             }

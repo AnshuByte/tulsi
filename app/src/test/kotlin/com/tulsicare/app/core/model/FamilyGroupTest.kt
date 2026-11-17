@@ -1,8 +1,7 @@
-﻿package com.tulsicare.app.core.model
+package com.tulsicare.app.core.model
 
 import com.tulsicare.app.core.database.entity.toEntity
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class FamilyGroupTest {

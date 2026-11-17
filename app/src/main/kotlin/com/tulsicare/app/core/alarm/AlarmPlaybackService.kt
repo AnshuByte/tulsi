@@ -68,7 +68,7 @@ class AlarmPlaybackService : Service() {
 
         val notification = buildAlarmNotification()
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(
                 NOTIFICATION_ID_ALARM,
                 notification,
@@ -91,21 +91,16 @@ class AlarmPlaybackService : Service() {
     private fun requestAudioFocusAndPlaySound() {
         try {
             val audioManager = getSystemService<AudioManager>()
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val focusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
-                    .setAudioAttributes(
-                        AudioAttributes.Builder()
-                            .setUsage(AudioAttributes.USAGE_ALARM)
-                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                            .build()
-                    )
-                    .build()
-                audioFocusRequest = focusRequest
-                audioManager?.requestAudioFocus(focusRequest)
-            } else {
-                @Suppress("DEPRECATION")
-                audioManager?.requestAudioFocus(null, AudioManager.STREAM_ALARM, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
-            }
+            val focusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ALARM)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build()
+                )
+                .build()
+            audioFocusRequest = focusRequest
+            audioManager?.requestAudioFocus(focusRequest)
 
             val alertUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
                 ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
@@ -136,12 +131,7 @@ class AlarmPlaybackService : Service() {
             }
 
             val pattern = longArrayOf(0, 800, 400, 800, 400)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator?.vibrate(VibrationEffect.createWaveform(pattern, 0))
-            } else {
-                @Suppress("DEPRECATION")
-                vibrator?.vibrate(pattern, 0)
-            }
+            vibrator?.vibrate(VibrationEffect.createWaveform(pattern, 0))
         } catch (_: Exception) {}
     }
 
@@ -243,7 +233,7 @@ class AlarmPlaybackService : Service() {
         stopRingingAndVibration()
 
         // Close AlarmActivity if still shown
-        sendBroadcast(Intent(ACTION_DISMISS_ALARM_ACTIVITY))
+        sendBroadcast(Intent(ACTION_DISMISS_ALARM_ACTIVITY).setPackage(packageName))
 
         // Post persistent "Missed reminder: tap to respond" notification
         val notificationManager = getSystemService<NotificationManager>()
@@ -322,11 +312,8 @@ class AlarmPlaybackService : Service() {
 
         try {
             val audioManager = getSystemService<AudioManager>()
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && audioFocusRequest != null) {
+            if (audioFocusRequest != null) {
                 audioManager?.abandonAudioFocusRequest(audioFocusRequest!!)
-            } else {
-                @Suppress("DEPRECATION")
-                audioManager?.abandonAudioFocus(null)
             }
         } catch (_: Exception) {}
     }
